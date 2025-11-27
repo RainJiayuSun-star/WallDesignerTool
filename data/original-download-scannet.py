@@ -6,7 +6,6 @@ import argparse
 import os
 import urllib.request 
 import tempfile
-import sys
 
 import ssl 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -31,10 +30,6 @@ LABEL_MAP_FILE = LABEL_MAP_FILES[0]
 RELEASE_SIZE = '1.2TB'
 V1_IDX = 1
 
-# New global variable to track downloaded size
-MAX_DOWNLOAD_SIZE_GB = 0
-CURRENT_DOWNLOAD_SIZE_BYTES = 0
-GB_TO_BYTES = 1024**3
 
 def get_release_scans(release_file):
     scan_lines = urllib.request.urlopen(release_file)
@@ -55,75 +50,19 @@ def download_release(release_scans, out_dir, file_types, use_v1_sens, skip_exist
     print('Downloaded ScanNet ' + RELEASE_NAME + ' release.')
 
 
-# def download_file(url, out_file):
-#     out_dir = os.path.dirname(out_file)
-#     if not os.path.isdir(out_dir):
-#         os.makedirs(out_dir)
-#     if not os.path.isfile(out_file):
-#         print('\t' + url + ' > ' + out_file)
-#         fh, out_file_tmp = tempfile.mkstemp(dir=out_dir)
-#         f = os.fdopen(fh, 'w')
-#         f.close()
-#         urllib.request.urlretrieve(url, out_file_tmp)
-#         os.rename(out_file_tmp, out_file)
-#     else:
-#         print('WARNING: skipping download of existing file ' + out_file)
-
-# new download_file method with specification of max size of data
 def download_file(url, out_file):
-    global CURRENT_DOWNLOAD_SIZE_BYTES
-    global MAX_DOWNLOAD_SIZE_GB
-    global GB_TO_BYTES
-    
-    # Check if limit is already exceeded
-    if MAX_DOWNLOAD_SIZE_GB > 0 and CURRENT_DOWNLOAD_SIZE_BYTES >= MAX_DOWNLOAD_SIZE_GB * GB_TO_BYTES:
-        print(f"\n[SIZE LIMIT REACHED] Stopping download. Total downloaded: {CURRENT_DOWNLOAD_SIZE_BYTES / GB_TO_BYTES:.2f} GB.")
-        # Exit the entire script gracefully
-        sys.exit(0)
-
     out_dir = os.path.dirname(out_file)
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    
-    if os.path.isfile(out_file):
-        print('WARNING: skipping download of existing file ' + out_file)
-        return # Skip existing file, do not count its size towards the limit
-
-    print('\t' + url + ' > ' + out_file)
-    
-    try:
-        # 1. Get file size from server (HEAD request)
-        response = urllib.request.urlopen(url)
-        file_size_bytes = int(response.info().get('Content-Length', 0))
-        
-        # 2. Check if adding this file will exceed the limit
-        if MAX_DOWNLOAD_SIZE_GB > 0 and (CURRENT_DOWNLOAD_SIZE_BYTES + file_size_bytes) > MAX_DOWNLOAD_SIZE_GB * GB_TO_BYTES:
-            print(f"\n[SIZE LIMIT APPROACHED] Skipping file as it would exceed the limit of {MAX_DOWNLOAD_SIZE_GB} GB.")
-            print(f"Current total: {CURRENT_DOWNLOAD_SIZE_BYTES / GB_TO_BYTES:.2f} GB. File size: {file_size_bytes / GB_TO_BYTES:.2f} GB.")
-            # Exit the entire script gracefully
-            sys.exit(0)
-            
-        # 3. Perform the actual download
+    if not os.path.isfile(out_file):
+        print('\t' + url + ' > ' + out_file)
         fh, out_file_tmp = tempfile.mkstemp(dir=out_dir)
-        os.close(fh) # Close the file descriptor, as urlretrieve will open it again
-        
-        # Use urlretrieve for the download
+        f = os.fdopen(fh, 'w')
+        f.close()
         urllib.request.urlretrieve(url, out_file_tmp)
-        
-        # Update the total downloaded size after successful download
-        CURRENT_DOWNLOAD_SIZE_BYTES += os.path.getsize(out_file_tmp)
-        
         os.rename(out_file_tmp, out_file)
-        
-    except urllib.error.URLError as e:
-        print(f"ERROR: Could not download {url}. Reason: {e}")
-        # Clean up temporary file if it exists but the download failed
-        if 'out_file_tmp' in locals() and os.path.exists(out_file_tmp):
-             os.remove(out_file_tmp)
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        if 'out_file_tmp' in locals() and os.path.exists(out_file_tmp):
-             os.remove(out_file_tmp)
+    else:
+        print('WARNING: skipping download of existing file ' + out_file)
 
 def download_scan(scan_id, out_dir, file_types, use_v1_sens, skip_existing=False):
     print('Downloading ScanNet ' + RELEASE_NAME + ' scan ' + scan_id + ' ...')
@@ -201,20 +140,8 @@ def main():
     parser.add_argument('--scenesplat', action='store_true', help='download ScanNet files for SceneSplat 3DGS')
     parser.add_argument('--type', help='specific file type to download (.aggregation.json, .sens, .txt, _vh_clean.ply, _vh_clean_2.0.010000.segs.json, _vh_clean_2.ply, _vh_clean.segs.json, _vh_clean.aggregation.json, _vh_clean_2.labels.ply, _2d-instance.zip, _2d-instance-filt.zip, _2d-label.zip, _2d-label-filt.zip)')
     parser.add_argument('--skip_existing', action='store_true', help='skip download of existing files when downloading full release')
-
-    # --- NEW LINE ADDED ---
-    parser.add_argument('-s', '--size_limit_gb', type=float, help='MAXIMUM download size in GB (e.g., 5.0). Download stops when limit is exceeded.')
-    # ----------------------
-
     args = parser.parse_args()
 
-    # --- NEW LINES ADDED ---
-    global MAX_DOWNLOAD_SIZE_GB
-    if args.size_limit_gb is not None:
-        MAX_DOWNLOAD_SIZE_GB = args.size_limit_gb
-        print(f"*** Download size limit set to {MAX_DOWNLOAD_SIZE_GB} GB ***")
-    # -----------------------
-    
     print('By pressing any key to continue you confirm that you have agreed to the ScanNet terms of use as described at:')
     print(TOS_URL)
     print('***')
