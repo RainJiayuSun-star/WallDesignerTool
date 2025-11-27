@@ -19,13 +19,18 @@ python3 data/download-scannet.py -o ~/cs566FinalProject/data/scannet_data -s 5.0
 python3 data/download-scannet.py -o ~/cs566FinalProject/data/scannet_data --id scene0000_01
 ```
 
-#### Each scene
-- scene0000_00: 3.88GB
+#### Each scene 
+du -sh /path/to/your/folder # to inspect disk space use by a folder
 
+- scene0000_00: 3.88GB
+- scene0000_01: 4.1GB
 
 
 
 ## Matterport3D
+Data documentation from official matterport: https://github.com/niessner/Matterport/blob/master/data_organization.md
+
+---
 Script to download the Matterport3D data: http://kaldir.vc.cit.tum.de/matterport/download_mp.py. 
 
 Some useful info:
@@ -35,6 +40,8 @@ Script usage:
 - To download a specific scan (e.g., 17DRP5sb8fy): download-mp.py -o [directory in which to download] --id 17DRP5sb8fy. This is listed in the directory as matterport-scans.txt
 - To download a specific file type (e.g., *.sens, valid file suffixes listed here): download-mp.py -o [directory in which to download] --type .sens
 - *.sens files can be read using the sens-File reader (it's a bit easier to handle than a larger number of separate image files)
+
+---
 ### File types needed for this project
 
 #### Summary
