@@ -74,3 +74,47 @@ Ensuring results are aggregated, saved, and ready for analysis.
 | $\square$ | **Aggregate Report Generation** | Compute and log the final aggregate results (Mean IoU, Mean Dice, Average Runtime) for each method. |
 | $\square$ | **Output Mask Saving** | Implement saving of the final segmented masks (both Mask2Former and Clustering) as visual PNGs and/or raw NumPy files for qualitative analysis. |
 | $\square$ | **Save Final Report** | Save the final aggregated results (DataFrame) as a persistent file (e.g., CSV or JSON). |
+
+
+---
+## 🔬 How Evaluation and Benchmarking Works
+
+The benchmarking stage measures the performance of your prediction methods (P) against the objective truth (GT) derived from the dataset.
+
+### 1. Input Data
+
+The evaluation step requires three core inputs for every image:
+
+| Input | Source | Purpose |
+| :--- | :--- | :--- |
+| **Predicted Mask (P)** | Segmentation Method Output | Binary mask showing the predicted location of target surfaces (Walls/Floors). |
+| **Ground Truth (GT)** | Dataset Labels | Binary mask showing the true location of target surfaces. |
+| **Runtime Data** | Execution Timer | The elapsed time required to generate the predicted mask P. |
+
+### 2. Metric Calculation
+
+#### Segmentation Quality (IoU & Dice)
+
+These metrics quantify the overlap between the Predicted Mask (P) and the Ground Truth Mask (GT). Both are based on the counts of True Positives (TP), False Positives (FP), and False Negatives (FN). 
+
+* **Intersection over Union (IoU):** Measures the size of the intersection divided by the size of the union.
+    $$IoU = \frac{TP}{TP + FP + FN}$$
+* **Dice Coefficient:** Measures the similarity between the two samples, often preferred for highly imbalanced class sizes.
+    $$Dice = \frac{2 \times TP}{(2 \times TP) + FP + FN}$$
+
+#### Runtime Performance
+
+The total execution time for each method is tracked and logged for every image to determine efficiency.
+
+### 3. Output Data
+
+The final output is a structured report enabling direct comparison between the Mask2Former and Clustering methods:
+
+* **Image-by-Image Results:** A detailed table logging every metric (IoU, Dice, Runtime) for each image processed.
+* **Aggregate Report:** The final summary statistics: **Mean IoU**, **Mean Dice Coefficient**, and **Average Runtime** across the entire benchmark dataset for each method.
+
+---
+
+I have incorporated the detailed explanation into the `README.md` format under the heading **How Evaluation and Benchmarking Works**.
+
+Would you like to review the code needed to calculate the IoU metric?
