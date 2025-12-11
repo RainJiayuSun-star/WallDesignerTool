@@ -1,51 +1,62 @@
 import argparse
 import os
-import glob
 import sys
+import glob
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
 from PIL import Image
 import itertools
-from datasets import load_dataset # Required for ADE20K streaming
+from datasets import load_dataset  # Required for ADE20K streaming
 import pandas as pd
-import time # Required for runtime metric
+import time  # Required for runtime metric
 
+# ------------------------------------------------------------------------------
 # Import modular components
-from segmentation import Mask2FormerSegmentation
-# from clustering import ClusteringSegmentation # Placeholder
-from metrics import calculate_iou, calculate_dice # ASSUMPTION: You will implement these
+# Support both `python -m benchmark.main` and `python benchmark/main.py`
+# ------------------------------------------------------------------------------
+if __package__ is None:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, script_dir)
+    from segmentation import Mask2FormerSegmentation  # type: ignore
+    from metrics import calculate_iou, calculate_dice  # type: ignore
+else:
+    from .segmentation import Mask2FormerSegmentation
+    from .metrics import calculate_iou, calculate_dice
+
+# Clustering placeholder (not yet implemented for this benchmark focus)
+# from clustering import ClusteringSegmentation
+
 
 # ==============================================================================
-# DATASET AND VISUALIZATION UTILITIES (Copied from your original script)
+# ADE20K DATA DECODING UTILITIES
 # ==============================================================================
 
 def get_ade20k_palette():
+    """Returns a random palette for visualizing the 151 classes."""
     np.random.seed(42)
-    # 151 classes for ADE20K
     palette = np.random.randint(0, 255, size=(151, 3), dtype=np.uint8)
     return palette
 
-def visualize_prediction(image, pred_map, ax, title="Prediction", target_ids=None):
-    """Visualization function (primarily for qualitative checks)."""
-    palette = get_ade20k_palette()
-    color_seg = np.zeros((pred_map.shape[0], pred_map.shape[1], 3), dtype=np.uint8)
-    for label_id in np.unique(pred_map):
-        # We only visualize the target IDs here if specified
-        if target_ids is not None and label_id not in target_ids:
-            continue
-        if label_id < len(palette):
-            color_seg[pred_map == label_id] = palette[label_id]
-            
-    ax.imshow(image)
-    ax.imshow(color_seg, alpha=0.5)
-    ax.set_title(title)
-    ax.axis('off')
+def decode_ade20k_seg_png(seg_img):
+    """
+    Decodes the color-coded ADE20K segmentation PNG (e.g., _seg.png)
+    into a semantic class ID map. Local ADE20K _seg.png files may be
+    single-channel label maps; the streamed dataset uses R + G * 256 encoding.
+    """
+    # If already single-channel label image, return directly
+    if seg_img.mode in ("L", "I"):
+        return np.array(seg_img, dtype=np.uint16)
+
+    # Fallback for color-encoded masks: ADE20K encoding Class ID = R + G * 256
+    seg_map_np = np.array(seg_img, dtype=np.uint16)
+    R = seg_map_np[:, :, 0]
+    G = seg_map_np[:, :, 1]
+    semantic_map = R + G * 256
+    return semantic_map.astype(np.uint16)
+
 
 def load_examples(args):
     """
-    Loads images either locally or from the streamed ADE20K dataset,
-    exactly as defined in your original script.
+    Loads images either locally (looking for .jpg) or from the streamed ADE20K dataset.
     """
     examples = []
     if args.local:
@@ -53,88 +64,144 @@ def load_examples(args):
         if not os.path.exists(args.dir):
             print(f"Directory {args.dir} does not exist.")
             return []
-        image_files = glob.glob(os.path.join(args.dir, "*.png"))
+        
+        # Look for .jpg files based on ADE20K structure
+        image_files = glob.glob(os.path.join(args.dir, "*.jpg"))
         image_files.sort()
+        
         for img_path in image_files:
             try:
-                # Assuming you'll have GT masks that share a name base.
                 img = Image.open(img_path).convert("RGB")
                 examples.append({"image": img, "filename": os.path.basename(img_path)})
             except Exception as e:
                 print(f"Error loading {img_path}: {e}")
         if not examples:
-            print(f"No PNG images found in {args.dir}")
+            print(f"No JPG images found in {args.dir}")
     else:
         print("Loading ADE20K dataset stream...")
         try:
-            # Note: This streaming approach only provides the 'image' and 'annotation' keys
-            # and may require an Internet connection.
-            dataset = load_dataset("1aurent/ADE20K", split="validation", streaming=True)
             # Load 2 examples (as in your original code)
+            dataset = load_dataset("1aurent/ADE20K", split="validation", streaming=True)
             examples = list(itertools.islice(dataset, 10, 12)) 
         except Exception as e:
-            print(f"Error loading dataset: {e}. Check internet connection or Hugging Face token.")
+            print(f"Error loading dataset: {e}. Check internet connection.")
     return examples
 
-# ==============================================================================
-# BENCHMARK-SPECIFIC FUNCTIONS
-# ==============================================================================
 
 def load_ground_truth(example_data, gt_dir=None):
     """
-    Extracts the ground truth mask from the loaded example data.
+    Extracts the ground truth mask, handling both streamed and local (_seg.png) formats.
     
-    If loading locally, it relies on the filesystem.
-    If loading from ADE20K stream, the GT is in the 'annotation' field.
+    Returns: Binary mask (1=Wall, 0=Other).
     """
+    # ADE20K class IDs for wall-only evaluation: wall=0
+    ade20k_wall_id = 0
+
     if 'annotation' in example_data:
-        # Data loaded from ADE20K stream (Annotation is the PIL Image of segmentation map)
+        # 1. Data loaded from ADE20K stream
         gt_mask_img = example_data['annotation']
-        gt_mask = np.array(gt_mask_img) # HxW array of class IDs
-        
-        # ADE20K class IDs for Wall (3) and Floor (5) - **Verify these IDs**
-        ade20k_target_ids = [3, 5] 
-        
-        # Generate the target binary mask for the GT
-        gt_binary_mask = np.isin(gt_mask, ade20k_target_ids).astype(np.uint8)
-        
-        return gt_binary_mask
+        gt_mask = decode_ade20k_seg_png(gt_mask_img)
         
     elif 'filename' in example_data and gt_dir:
-        # Data loaded locally (Need to infer GT file name)
+        # 2. Data loaded locally (load and decode the _seg.png file)
         image_filename = example_data['filename']
         base_name = os.path.splitext(image_filename)[0]
-        # Assume GT masks are named identically but are stored as NumPy files (.npy)
-        gt_path = os.path.join(gt_dir, base_name + ".npy")
-        
+
+        # Try instance-mask-based wall union first (from JSON metadata)
+        json_path = os.path.join(gt_dir, base_name + ".json")
+        if os.path.exists(json_path):
+            try:
+                import json
+
+                with open(json_path, "r") as f:
+                    meta = json.load(f)
+                wall_mask = None
+                objects = meta.get("annotation", {}).get("object", [])
+                for obj in objects:
+                    name = (obj.get("name") or "").lower()
+                    raw_name = (obj.get("raw_name") or "").lower()
+                    if "wall" not in name and "wall" not in raw_name:
+                        continue
+                    mask_rel = obj.get("instance_mask")
+                    if not mask_rel:
+                        continue
+                    mask_path = os.path.join(gt_dir, mask_rel)
+                    if not os.path.exists(mask_path):
+                        continue
+                    mask_img = Image.open(mask_path).convert("L")
+                    mask_arr = (np.array(mask_img) > 0).astype(np.uint8)
+                    if wall_mask is None:
+                        wall_mask = mask_arr
+                    else:
+                        wall_mask = np.logical_or(wall_mask, mask_arr).astype(np.uint8)
+                if wall_mask is not None:
+                    return wall_mask
+            except Exception as e:
+                print(f"Warning: Failed to build instance wall mask for {image_filename}: {e}")
+
+        # Fallback: semantic seg png
+        gt_path = os.path.join(gt_dir, base_name + "_seg.png")
         if os.path.exists(gt_path):
-            gt_mask = np.load(gt_path)
-            # You must define target IDs for your local dataset
-            local_target_ids = [3, 5] 
-            gt_binary_mask = np.isin(gt_mask, local_target_ids).astype(np.uint8)
-            return gt_binary_mask
+            gt_mask_img = Image.open(gt_path).convert("RGB")
+            gt_mask = decode_ade20k_seg_png(gt_mask_img)
         else:
             print(f"Warning: Local GT mask not found for {image_filename} at {gt_path}")
             return None
+    else:
+        return None
     
-    return None
+    # Final step: Convert the semantic class ID map into a binary mask (wall only)
+    gt_binary_mask = (gt_mask == ade20k_wall_id).astype(np.uint8)
+    return gt_binary_mask
 
+
+# ==============================================================================
+# MAIN BENCHMARK EXECUTION LOGIC
+# ==============================================================================
 
 def main():
     parser = argparse.ArgumentParser(description="Wall Designer Tool Benchmark Runner")
     parser.add_argument("--segmentationMethod", type=str, default="mask2former", choices=["mask2former"], help="Method for wall segmentation")
     
-    parser.add_argument("--local", action="store_true", help="Use local images from --dir")
-    parser.add_argument("--dir", type=str, default=os.path.join(os.path.dirname(__file__), "benchmark_images"), help="Directory containing local images and GT masks")
-    parser.add_argument("--output", type=str, default="benchmark_results.csv", help="Path to save the final benchmark CSV")
+    # Default to using the ADE20K child's room subset under validation/home_or_hotel
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_childs_room_dir = os.path.normpath(
+        os.path.join(script_dir, "..", "data", "ADE20K", "validation", "home_or_hotel", "childs_room")
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        default=True,
+        help="Use local images from --dir (defaults to ADE20K validation/home_or_hotel/childs_room)",
+    )
+    parser.add_argument("--dir", type=str, default=default_childs_room_dir, help="Directory containing local images and GT masks")
+    default_output = os.path.normpath(os.path.join(script_dir, "benchmark_output", "benchmark_results_childs_room.csv"))
+    parser.add_argument("--output", type=str, default=default_output, help="Path to save the final benchmark CSV")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print label stats for GT/pred and save binary masks (PNG) for inspection",
+    )
     
     args = parser.parse_args()
+
+    # Ensure output directory exists
+    out_dir = os.path.dirname(args.output) or "."
+    os.makedirs(out_dir, exist_ok=True)
+
+    debug_dir = None
+    if args.debug:
+        debug_dir = os.path.join(out_dir, "debug_masks")
+        os.makedirs(debug_dir, exist_ok=True)
 
     # 1. Initialize Components
     if args.segmentationMethod == "mask2former":
         segmenter = Mask2FormerSegmentation() 
-    
-    # 2. Load Data (Uses your original function)
+    # Add clustering initialization here later:
+    # elif args.segmentationMethod == "clustering":
+    #    segmenter = ClusteringSegmentation()
+
+    # 2. Load Data 
     examples = load_examples(args)
     if not examples:
         return
@@ -144,22 +211,31 @@ def main():
 
     # 3. The Benchmark Loop 
     for idx, example in enumerate(examples):
-        # The 'image' key is always a PIL Image (local or streaming)
         image = example['image']
-        # The filename is available if loaded locally; otherwise, use a placeholder
         image_name = example.get('filename', f"ADE20K_Example_{idx+1}.png")
         
         print(f"--- Processing {image_name} ({idx+1}/{len(examples)}) ---")
 
-        # A. Load Ground Truth Mask (Crucial Step)
-        # Pass the full example data structure for context-aware GT loading
+        # A. Load Ground Truth Mask 
         gt_binary_mask = load_ground_truth(example, gt_dir=args.dir)
         if gt_binary_mask is None:
-            continue # Skip images without GT
+            continue
 
         # B. Run Segmentation and Time
         # segmenter.segment() returns (binary_mask_np, runtime)
         pred_binary_mask, runtime_m2f = segmenter.segment(image)
+        
+        if args.debug:
+            if idx == 0:
+                print(f"GT unique labels for {image_name}: {np.unique(gt_binary_mask)}")
+                print(f"Pred unique labels for {image_name}: {np.unique(pred_binary_mask)}")
+            base_name = os.path.splitext(image_name)[0]
+            # Save binary masks for quick visual inspection
+            if debug_dir:
+                gt_save = os.path.join(debug_dir, f"{base_name}_gt_mask.png")
+                pred_save = os.path.join(debug_dir, f"{base_name}_pred_mask.png")
+                Image.fromarray((gt_binary_mask * 255).astype(np.uint8)).save(gt_save)
+                Image.fromarray((pred_binary_mask * 255).astype(np.uint8)).save(pred_save)
         
         # C. Calculate Metrics
         try:
@@ -178,6 +254,7 @@ def main():
             'iou': iou_m2f,
             'dice_coefficient': dice_m2f,
             'runtime_sec': runtime_m2f,
+            # Add placeholders for clustering results here when implemented
         }
         benchmark_data.append(result_entry)
         
@@ -186,7 +263,6 @@ def main():
 
     # 4. Final Aggregation and Save
     if benchmark_data:
-        # ... (Aggregation and Saving logic remains the same) ...
         results_df = pd.DataFrame(benchmark_data)
         
         # Calculate aggregate means
