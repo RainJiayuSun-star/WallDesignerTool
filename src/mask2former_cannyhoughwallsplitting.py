@@ -169,7 +169,9 @@ def run(args):
         for img_path in image_files:
             try:
                 img = Image.open(img_path).convert("RGB")
-                examples.append({"image": img, "filename": os.path.basename(img_path)})
+                filename = os.path.basename(img_path)
+                examples.append({"image": img, "filename": filename})
+                print(f"Loaded image: {filename}")
             except Exception as e:
                 print(f"Error loading {img_path}: {e}")
         
@@ -190,11 +192,12 @@ def run(args):
             return
 
         # Process a few examples
-        num_examples = 2
+        num_examples = 4
         # Use islice to grab just the first few items from the stream
         # Skip the first 10 to get different examples
-        examples = list(itertools.islice(dataset, 10, 10 + num_examples))
-
+        examples = list(itertools.islice(dataset, 1033, 1033 + num_examples))
+        for i, ex in enumerate(examples):
+            print(f"Loaded dataset example {i}: {ex.get('filename', 'Unknown')}")
     # 3. Load Model and Processor
     model_id = "facebook/mask2former-swin-large-ade-semantic"
     print(f"Loading model: {model_id}...")

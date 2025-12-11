@@ -165,31 +165,33 @@ class MaskedPerspectiveMapping(TextureMappingStrategy):
         h, w = shape[:2]
         pts_dst = poly.astype("float32")
         
-        # Estimate real-world aspect ratio based on the pixel polygon
-        width = np.linalg.norm(pts_dst[0] - pts_dst[1])
-        height = np.linalg.norm(pts_dst[0] - pts_dst[3])
+        # --- CRITICAL FIX: DO NOT RE-ORDER POINTS ---
+        # The Splitting strategy explicitly returns [TL, TR, BR, BL].
+        # Re-ordering them blindly (using sum/diff) causes twists on slanted walls.
+        # We trust the input order.
+        
+        # Estimate width/height for Tiling
+        # Top width (TL to TR)
+        width_top = np.linalg.norm(pts_dst[0] - pts_dst[1])
+        # Left height (TL to BL)
+        height_left = np.linalg.norm(pts_dst[0] - pts_dst[3])
+        
+        # Safety check for degenerate polygons (width=0)
+        if width_top < 1: width_top = 1
+        if height_left < 1: height_left = 1
         
         # Create Tiled Source
-        tiled = self._tile_texture(int(width), int(height))
+        tiled = self._tile_texture(int(width_top), int(height_left))
         
+        # Define Source Points [TL, TR, BR, BL] matching destination
         pts_src = np.array([
-            [0, 0],
-            [tiled.shape[1]-1, 0],
-            [tiled.shape[1]-1, tiled.shape[0]-1],
-            [0, tiled.shape[0]-1]
+            [0, 0],                                  # TL
+            [tiled.shape[1]-1, 0],                   # TR
+            [tiled.shape[1]-1, tiled.shape[0]-1],    # BR
+            [0, tiled.shape[0]-1]                    # BL
         ], dtype="float32")
         
-        # Compute Homography and Warp
-        # Ensure we have 4 points
-        if len(pts_dst) != 4:
-            # Simple bounding box fallback if poly is not 4 points?
-            # Or handle error. The Refiner should return 4 points.
-            # If not, let's just return black
-            return np.zeros((h, w, 3), dtype=np.uint8)
-
-        # Reorder points to be TL, TR, BR, BL for consistent mapping
-        pts_dst = self._order_points(pts_dst)
-
+        # Warp
         M = cv2.getPerspectiveTransform(pts_src, pts_dst)
         warped = cv2.warpPerspective(tiled, M, (w, h))
         return warped

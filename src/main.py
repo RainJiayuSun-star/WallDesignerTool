@@ -11,7 +11,7 @@ from datasets import load_dataset
 
 # Import modular components
 from segmentation import Mask2FormerSegmentation
-from splitting import CannyHoughSplitting, WallRefinerSplitting
+from splitting import CannyHoughSplitting, WallRefinerSplitting, ContourCornerSplitting, RobustCornerSplitting, CeilingKinkSplitting, CeilingAndFloorKinkSplitting
 from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping
 
 def get_ade20k_palette():
@@ -44,7 +44,9 @@ def load_examples(args):
         for img_path in image_files:
             try:
                 img = Image.open(img_path).convert("RGB")
-                examples.append({"image": img, "filename": os.path.basename(img_path)})
+                filename = os.path.basename(img_path)
+                examples.append({"image": img, "filename": filename})
+                print(f"Loaded image: {filename}")
             except Exception as e:
                 print(f"Error loading {img_path}: {e}")
         if not examples:
@@ -53,7 +55,9 @@ def load_examples(args):
         print("Loading ADE20K dataset stream...")
         try:
             dataset = load_dataset("1aurent/ADE20K", split="validation", streaming=True)
-            examples = list(itertools.islice(dataset, 10, 12)) # Load 2 examples
+            examples = list(itertools.islice(dataset, 12, 14)) # Load 2 examples
+            for i, ex in enumerate(examples):
+                print(f"Loaded dataset example {i}: {ex.get('filename', 'Unknown')}")
         except Exception as e:
             print(f"Error loading dataset: {e}")
     return examples
@@ -61,7 +65,7 @@ def load_examples(args):
 def main():
     parser = argparse.ArgumentParser(description="Wall Designer Tool Pipeline")
     parser.add_argument("--segmentationMethod", type=str, default="mask2former", choices=["mask2former"], help="Method for wall segmentation")
-    parser.add_argument("--splittingMethod", type=str, default="refiner", choices=["cannyhough", "refiner"], help="Method for splitting connected walls")
+    parser.add_argument("--splittingMethod", type=str, default="ceilingKink", choices=["cannyhough", "refiner", "contourCorner", "ceilingKink", "ceilingFloorKink"], help="Method for splitting connected walls")
     parser.add_argument("--textureMappingMethod", type=str, default="maskedPerspective", choices=["homographyMultiply", "maskedPerspective"], help="Method for applying texture")
     
     parser.add_argument("--local", action="store_true", help="Use local images from --dir")
@@ -78,6 +82,15 @@ def main():
         splitter = CannyHoughSplitting()
     elif args.splittingMethod == "refiner":
         splitter = WallRefinerSplitting()
+    elif args.splittingMethod == "contourCorner":
+        # Updated to use RobustCornerSplitting as requested
+        # sensitivity=0.002 catches shallow corners
+        # angle_threshold=5 ignores minor wiggly lines
+        splitter = RobustCornerSplitting(sensitivity=0.002, angle_threshold=5)
+    elif args.splittingMethod == "ceilingKink":
+        splitter = CeilingKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin_top=5)
+    elif args.splittingMethod == "ceilingFloorKink":
+        splitter = CeilingAndFloorKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin=5)
         
     if args.textureMappingMethod == "homographyMultiply":
         mapper = HomographyMultiplyMapping(args.texture)
@@ -114,6 +127,7 @@ def main():
         # Ensure mask is correct format if needed by splitter, but our splitter handles it.
         # WallRefinerSplitting expects 0-255 internally or handles 0-1.
         
+        # RobustCornerSplitting can use the image for verification
         segments, polygons = splitter.split(full_wall_mask, image_np)
         
         # C. Mapping
@@ -135,16 +149,23 @@ def main():
 
         # Col 3: Splitting (Wall Edges/Polygons)
         vis_split = image_np.copy()
+        debug_img = np.array(image).copy()
         for i, poly in enumerate(polygons):
-            cv2.polylines(vis_split, [poly], True, (0, 255, 0), 3)
+            # Draw the full trapezoid in Green
+            cv2.polylines(vis_split, [poly], True, (0, 255, 0), 2)
+            cv2.polylines(debug_img, [poly], True, (0, 255, 0), 2)
+            # Draw JUST the ceiling line in Red (to confirm logic)
+            cv2.line(debug_img, tuple(poly[0]), tuple(poly[1]), (255, 0, 0), 4)
             # Label center
             M = cv2.moments(poly)
             if M["m00"] != 0:
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
                 cv2.putText(vis_split, str(i+1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        axes[idx, 2].imshow(vis_split)
-        axes[idx, 2].set_title(f"Splitting ({len(segments)} walls)")
+                cv2.putText(debug_img, str(i+1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        
+        axes[idx, 2].imshow(debug_img)
+        axes[idx, 2].set_title(f"Splitting (Red=Ceiling)")
         axes[idx, 2].axis('off')
 
         # Col 4: Texture Applied
