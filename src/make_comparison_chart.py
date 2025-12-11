@@ -48,7 +48,7 @@ def visualize_prediction(image, pred_map, ax, title="Prediction", target_ids=Non
 
 def load_examples(args):
     examples = []
-    
+
     if args.use_ade20k:
         # Load from ADE20K validation set
         print("Loading ADE20K validation set...")
@@ -59,7 +59,13 @@ def load_examples(args):
                 streaming=True,
             )
             # Load multiple examples for better comparison
-            hf_examples = list(itertools.islice(dataset, args.ade20k_start_idx, args.ade20k_start_idx + args.ade20k_count))
+            hf_examples = list(
+                itertools.islice(
+                    dataset,
+                    args.ade20k_start_idx,
+                    args.ade20k_start_idx + args.ade20k_count,
+                )
+            )
             for i, item in enumerate(hf_examples):
                 if "image" in item and "annotation" in item:
                     # Handle image conversion
@@ -67,13 +73,13 @@ def load_examples(args):
                         img = item["image"].convert("RGB")
                     else:
                         img = Image.fromarray(np.array(item["image"])).convert("RGB")
-                    
+
                     # Handle annotation
                     if isinstance(item["annotation"], Image.Image):
                         annotation = item["annotation"]
                     else:
                         annotation = Image.fromarray(np.array(item["annotation"]))
-                    
+
                     examples.append(
                         {
                             "image": img,
@@ -87,7 +93,7 @@ def load_examples(args):
             print(f"❌ Error loading ADE20K dataset: {e}")
             print("Falling back to local images...")
             args.use_ade20k = False
-    
+
     # Load local images if not using ADE20K or as fallback
     if not args.use_ade20k:
         print(f"Loading local images from {args.dir}...")
@@ -168,11 +174,13 @@ def run_pipeline_for_all_models(models, examples, texture_path, output_filename)
                 gt_mask_array = np.array(gt_mask_img)
             else:
                 gt_mask_array = np.array(gt_mask_img)
-            
+
             # ADE20K class ID for wall is 0 (based on benchmark code)
             # Note: ADE20K uses 0-indexed class IDs where 0 = wall
             gt_mask = np.isin(gt_mask_array, [0]).astype(np.uint8)
-            print(f"    Ground truth loaded: {np.sum(gt_mask > 0)} wall pixels ({np.sum(gt_mask > 0) / gt_mask.size * 100:.2f}%)")
+            print(
+                f"    Ground truth loaded: {np.sum(gt_mask > 0)} wall pixels ({np.sum(gt_mask > 0) / gt_mask.size * 100:.2f}%)"
+            )
 
         # Figure: 1 row per model, 3 columns (Model Name, Segmentation, Texture Result)
         # Plus a row for Original? Or just put Original on top?
