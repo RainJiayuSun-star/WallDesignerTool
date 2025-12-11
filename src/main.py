@@ -11,8 +11,8 @@ from datasets import load_dataset
 
 # Import modular components
 from segmentation import Mask2FormerSegmentation
-from splitting import CannyHoughSplitting
-from mapping import HomographyMultiplyMapping
+from splitting import CannyHoughSplitting, WallRefinerSplitting
+from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping
 
 def get_ade20k_palette():
     np.random.seed(42)
@@ -61,8 +61,8 @@ def load_examples(args):
 def main():
     parser = argparse.ArgumentParser(description="Wall Designer Tool Pipeline")
     parser.add_argument("--segmentationMethod", type=str, default="mask2former", choices=["mask2former"], help="Method for wall segmentation")
-    parser.add_argument("--splittingMethod", type=str, default="cannyhough", choices=["cannyhough"], help="Method for splitting connected walls")
-    parser.add_argument("--textureMappingMethod", type=str, default="homographyMultiply", choices=["homographyMultiply"], help="Method for applying texture")
+    parser.add_argument("--splittingMethod", type=str, default="refiner", choices=["cannyhough", "refiner"], help="Method for splitting connected walls")
+    parser.add_argument("--textureMappingMethod", type=str, default="maskedPerspective", choices=["homographyMultiply", "maskedPerspective"], help="Method for applying texture")
     
     parser.add_argument("--local", action="store_true", help="Use local images from --dir")
     parser.add_argument("--dir", type=str, default=os.path.join(os.path.dirname(__file__), "ourSet"), help="Directory containing local images")
@@ -76,9 +76,13 @@ def main():
     
     if args.splittingMethod == "cannyhough":
         splitter = CannyHoughSplitting()
+    elif args.splittingMethod == "refiner":
+        splitter = WallRefinerSplitting()
         
     if args.textureMappingMethod == "homographyMultiply":
         mapper = HomographyMultiplyMapping(args.texture)
+    elif args.textureMappingMethod == "maskedPerspective":
+        mapper = MaskedPerspectiveMapping(args.texture)
 
     # 2. Load Data
     examples = load_examples(args)
@@ -105,13 +109,19 @@ def main():
         print(f"Splitting example {idx+1}...")
         full_wall_mask = np.zeros(pred_map.shape, dtype=np.uint8)
         for w_id in wall_ids:
-            full_wall_mask[pred_map == w_id] = 1
+            full_wall_mask[pred_map == w_id] = 1 # Keep 0/1 for now
             
+        # Ensure mask is correct format if needed by splitter, but our splitter handles it.
+        # WallRefinerSplitting expects 0-255 internally or handles 0-1.
+        
         segments, polygons = splitter.split(full_wall_mask, image_np)
         
         # C. Mapping
         print(f"Mapping texture for example {idx+1}...")
-        textured_image = mapper.apply(image_np, polygons)
+        # Prepare full_wall_mask as 0-255/bool for mapper if needed
+        full_wall_mask_255 = (full_wall_mask * 255).astype(np.uint8)
+        
+        textured_image = mapper.apply(image_np, polygons, full_mask=full_wall_mask_255)
 
         # D. Visualization
         # Col 1: Original
