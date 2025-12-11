@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from scipy.signal import find_peaks
 
 class SplittingStrategy:
     def split(self, binary_mask, original_image):
@@ -96,3 +97,116 @@ class CannyHoughSplitting(SplittingStrategy):
 
         return approx.reshape(-1, 2)
 
+class WallRefinerSplitting(SplittingStrategy):
+    def __init__(self, min_wall_area=1000):
+        self.min_wall_area = min_wall_area
+
+    def split(self, binary_mask, original_image):
+        """
+        Returns separated wall segments and their polygons.
+        """
+        # Ensure binary mask is 0 or 255
+        if binary_mask.max() == 1:
+            binary_mask = (binary_mask * 255).astype(np.uint8)
+        else:
+            binary_mask = binary_mask.astype(np.uint8)
+
+        wall_polygons = self._get_structural_walls(binary_mask, original_image)
+        
+        wall_segments = []
+        h, w = binary_mask.shape
+        
+        # Create masks from polygons for consistency with SplittingStrategy
+        for poly in wall_polygons:
+            mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.fillPoly(mask, [poly], 255)
+            # Intersect with original mask to respect some boundaries if needed,
+            # but the Refiner logic implies these polygons ARE the structural walls.
+            # However, to avoid segments outside the original mask (if that's desired),
+            # we could AND it. But the Refiner seems to want to fix the mask.
+            # Let's trust the Refiner's polygons.
+            wall_segments.append(mask)
+            
+        return wall_segments, wall_polygons
+
+    def _get_structural_walls(self, binary_mask, image):
+        """
+        Returns a list of 4-point polygons representing the PLANES of the walls.
+        It converts the 2D image into a 1D signal to find dominant corners.
+        """
+        h, w = binary_mask.shape
+        
+        # 1. Bounding Box Optimization
+        #    Only analyze the area where a wall actually exists to save time/noise.
+        coords = cv2.findNonZero(binary_mask)
+        if coords is None: return [] # Handle empty masks
+        x, y, w_box, h_box = cv2.boundingRect(coords)
+        
+        # 2. Vertical Projection Analysis
+        #    Crop to the wall area
+        #    Ensure image is RGB (or at least has 3 channels or handle grayscale)
+        if len(image.shape) == 2:
+            roi_gray = image[y:y+h_box, x:x+w_box]
+        else:
+            roi_gray = cv2.cvtColor(image[y:y+h_box, x:x+w_box], cv2.COLOR_RGB2GRAY)
+        
+        #    Sobel X detects vertical changes (like corner shadows)
+        sobelx = cv2.Sobel(roi_gray, cv2.CV_64F, 1, 0, ksize=5)
+        sobelx = np.abs(sobelx)
+        
+        #    COLLAPSE THE IMAGE: Sum the edge strength down each column.
+        #    This is the "1D Signal" where corners become Peaks.
+        vertical_score = np.sum(sobelx, axis=0)
+        
+        # 3. Peak Finding (The "Smart" Splitter)
+        #    distance: Corners must be at least 10% of the width apart (prevents double lines)
+        #    prominence: The peak must be significantly higher than the surrounding noise (blinds)
+        min_dist = max(w_box // 10, 20)
+        
+        if np.max(vertical_score) == 0:
+            return []
+
+        peak_threshold = np.max(vertical_score) * 0.3
+        peaks, _ = find_peaks(vertical_score, distance=min_dist, prominence=peak_threshold)
+        
+        #    Map local ROI coordinates back to global image coordinates
+        cut_x_coords = [p + x for p in peaks]
+        
+        #    Define the vertical boundaries: Start of Box, Detected Corners, End of Box
+        boundaries = [x, x + w_box]
+        boundaries.extend(cut_x_coords)
+        boundaries.sort()
+        
+        wall_polygons = []
+        
+        # 4. Construct Geometric Planes
+        for i in range(len(boundaries) - 1):
+            x_start = boundaries[i]
+            x_end = boundaries[i+1]
+            
+            # Filter out tiny slivers (noise)
+            if (x_end - x_start) < 50: 
+                continue
+
+            # Find the ceiling and floor for this specific segment
+            # We look at the original mask within this vertical strip
+            strip_mask = binary_mask[:, x_start:x_end]
+            strip_points = cv2.findNonZero(strip_mask)
+            
+            if strip_points is not None:
+                _, y_strip, _, h_strip = cv2.boundingRect(strip_points)
+                
+                # Define the Perfect Rectangle for this wall section
+                # Note: y_strip is relative to the full image because strip_mask has full height
+                # but sliced width. Wait, strip_mask = binary_mask[:, x_start:x_end] preserves height.
+                # cv2.findNonZero returns (x, y). x is relative to strip (0..width), y is relative to image (0..h).
+                
+                poly = np.array([
+                    [x_start, y_strip],           # Top-Left
+                    [x_end, y_strip],             # Top-Right
+                    [x_end, y_strip + h_strip],   # Bottom-Right
+                    [x_start, y_strip + h_strip]  # Bottom-Left
+                ], dtype=np.int32)
+                wall_polygons.append(poly)
+
+        return wall_polygons
