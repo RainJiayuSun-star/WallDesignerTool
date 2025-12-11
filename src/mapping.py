@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 class TextureMappingStrategy:
-    def apply(self, original_image, wall_polygons):
+    def apply(self, original_image, wall_polygons, **kwargs):
         raise NotImplementedError
 
 class HomographyMultiplyMapping(TextureMappingStrategy):
@@ -30,7 +30,7 @@ class HomographyMultiplyMapping(TextureMappingStrategy):
         cv2.rectangle(dummy, (50, 50), (100, 100), (0, 255, 0), -1)
         return dummy
 
-    def apply(self, original_image, wall_polygons):
+    def apply(self, original_image, wall_polygons, **kwargs):
         textured_image = original_image.copy()
         for poly in wall_polygons:
             textured_image = self._apply_single_polygon(textured_image, poly)
@@ -94,3 +94,122 @@ class HomographyMultiplyMapping(TextureMappingStrategy):
         rect[3] = pts[np.argmax(diff)]
         return rect
 
+class MaskedPerspectiveMapping(TextureMappingStrategy):
+    def __init__(self, texture_path):
+        self.texture_path = texture_path
+        self._load_texture()
+
+    def _load_texture(self):
+        # Re-use loading logic or duplicate it. 
+        # Duplicating for simplicity/independence unless I refactor to a base class helper.
+        if not os.path.exists(self.texture_path):
+            print(f"Warning: Texture file '{self.texture_path}' not found. Creating dummy texture.")
+            self.texture = self._create_dummy_texture()
+        else:
+            img = cv2.imread(self.texture_path)
+            if img is None:
+                 print(f"Warning: Could not read texture file '{self.texture_path}'. Creating dummy texture.")
+                 self.texture = self._create_dummy_texture()
+            else:
+                self.texture = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    def _create_dummy_texture(self):
+        dummy = np.zeros((100, 100, 3), dtype=np.uint8)
+        dummy.fill(255)
+        cv2.rectangle(dummy, (0, 0), (50, 50), (0, 0, 255), -1)
+        cv2.rectangle(dummy, (50, 50), (100, 100), (0, 255, 0), -1)
+        return dummy
+
+    def apply(self, original_image, wall_polygons, **kwargs):
+        """
+        1. Warps texture to the Geometric Polygons (Perspective)
+        2. Masks the result using the Semantic Blob (Occlusion)
+        3. Blends using Multiply (Lighting Preservation)
+        """
+        full_mask = kwargs.get('full_mask')
+        if full_mask is None:
+            # Fallback if no full_mask provided: create one from polygons
+            print("Warning: full_mask not provided to MaskedPerspectiveMapping. Using polygons as mask.")
+            full_mask = np.zeros(original_image.shape[:2], dtype=np.uint8)
+            for poly in wall_polygons:
+                cv2.fillPoly(full_mask, [poly], 255)
+
+        # Create a blank canvas to accumulate texture warps
+        texture_layer = np.zeros_like(original_image)
+        
+        # A. Geometric Phase: Render texture onto the invisible rectangles
+        for poly in wall_polygons:
+            warped_segment = self._warp_texture_to_poly(original_image.shape, poly)
+            # Combine segments (taking max handles slight overlaps cleanly)
+            texture_layer = np.maximum(texture_layer, warped_segment)
+
+        # B. Semantic Phase: The "Cookie Cutter"
+        #    We only want the texture where Mask2Former says there is a wall.
+        #    AND where we actually successfully rendered a texture (valid_tex)
+        valid_tex = np.sum(texture_layer, axis=2) > 0
+        final_mask = (full_mask > 0) & valid_tex
+        
+        # C. Blending Phase: Multiply
+        img_float = original_image.astype(float) / 255.0
+        tex_float = texture_layer.astype(float) / 255.0
+        
+        blended = img_float.copy()
+        
+        # Logic: Result = Wall_Color * Texture_Color
+        # If the wall is dark (shadow), the result stays dark.
+        blended[final_mask] = img_float[final_mask] * tex_float[final_mask]
+        
+        return (blended * 255).astype(np.uint8)
+
+    def _warp_texture_to_poly(self, shape, poly):
+        h, w = shape[:2]
+        pts_dst = poly.astype("float32")
+        
+        # Estimate real-world aspect ratio based on the pixel polygon
+        width = np.linalg.norm(pts_dst[0] - pts_dst[1])
+        height = np.linalg.norm(pts_dst[0] - pts_dst[3])
+        
+        # Create Tiled Source
+        tiled = self._tile_texture(int(width), int(height))
+        
+        pts_src = np.array([
+            [0, 0],
+            [tiled.shape[1]-1, 0],
+            [tiled.shape[1]-1, tiled.shape[0]-1],
+            [0, tiled.shape[0]-1]
+        ], dtype="float32")
+        
+        # Compute Homography and Warp
+        # Ensure we have 4 points
+        if len(pts_dst) != 4:
+            # Simple bounding box fallback if poly is not 4 points?
+            # Or handle error. The Refiner should return 4 points.
+            # If not, let's just return black
+            return np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Reorder points to be TL, TR, BR, BL for consistent mapping
+        pts_dst = self._order_points(pts_dst)
+
+        M = cv2.getPerspectiveTransform(pts_src, pts_dst)
+        warped = cv2.warpPerspective(tiled, M, (w, h))
+        return warped
+
+    def _tile_texture(self, w, h):
+        if w <= 0 or h <= 0:
+            return np.zeros((1, 1, 3), dtype=np.uint8)
+            
+        th, tw = self.texture.shape[:2]
+        nx = int(np.ceil(w / tw))
+        ny = int(np.ceil(h / th))
+        tiled = np.tile(self.texture, (ny, nx, 1))
+        return tiled[:h, :w]
+
+    def _order_points(self, pts):
+        rect = np.zeros((4, 2), dtype="float32")
+        s = pts.sum(axis=1)
+        rect[0] = pts[np.argmin(s)]
+        rect[2] = pts[np.argmax(s)]
+        diff = np.diff(pts, axis=1)
+        rect[1] = pts[np.argmin(diff)]
+        rect[3] = pts[np.argmax(diff)]
+        return rect
