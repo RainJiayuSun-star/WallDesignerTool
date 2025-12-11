@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wall Designer Tool - CS566 Final Project</title>
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Google Fonts for better typography -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Montserrat:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Wall Designer Tool</h1>
+        <p class="subtitle">CS566 Computer Vision Final Project</p>
+        <nav>
+          <ul>
+            <li><a href="#motivation">Motivation</a></li>
+            <li><a href="#approach">Approach</a></li>
+            <li><a href="#implementation">Implementation</a></li>
+            <li><a href="#results">Results</a></li>
+            <li><a href="#discussion">Discussion</a></li>
+            <li><a href="#video">Video</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- 1. Motivation -->
+      <section id="motivation">
+        <h2>1. Motivation</h2>
+        <div class="content-block">
+          <p
+            style="
+              background-color: #e8f4f8;
+              padding: 10px;
+              border-left: 4px solid #3498db;
+              margin-bottom: 20px;
+            "
+          >
+            <strong>See also:</strong> Check out our
+            <a href="midterm.html"><strong>Midterm Project Report</strong></a>
+            for details on our team, initial experiments, and methodology
+            evolution.
+          </p>
+          <h3>Problem Statement</h3>
+          <p>
+            This project tackles the challenge of
+            <strong
+              >realistic, perspective-correct texture transfer onto indoor
+              planar surfaces</strong
+            >
+            (specifically walls) from a single 2D image. While humans easily
+            perceive the 3D geometry of a room from a photograph, automating the
+            process of identifying walls and applying new textures (like
+            wallpaper or paint) while respecting perspective and lighting is a
+            complex computer vision task.
+          </p>
+
+          <h3>Importance</h3>
+          <p>
+            Applications for this technology are vast, ranging from
+            <strong>Augmented Reality (AR) interior design apps</strong> to
+            virtual staging for real estate. Existing solutions often require
+            manual annotation of room corners or expensive depth sensors. Our
+            goal is to automate this pipeline using modern segmentation models
+            and geometric computer vision techniques.
+          </p>
+
+          <h3>Goals</h3>
+          <ul>
+            <li>Accurately segment wall regions from a single RGB image.</li>
+            <li>
+              Split connected wall segments into distinct planar surfaces.
+            </li>
+            <li>
+              Apply new textures that align with the perspective of each wall.
+            </li>
+            <li>Preserve realistic lighting and shadows.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 2. Approach -->
+      <section id="approach">
+        <h2>2. Approach</h2>
+        <div class="content-block">
+          <h3>Methodology Overview</h3>
+          <p>
+            We propose a three-stage pipeline to solve this problem:
+            <strong>Segmentation, Refinement (Splitting), and Overlay.</strong>
+          </p>
+
+          <div class="placeholder-image">
+            <p>[PLACEHOLDER: Insert high-level pipeline diagram here]</p>
+            <p><em>Fig 1. System Architecture Diagram</em></p>
+          </div>
+
+          <h3>Key Algorithms</h3>
+          <ul>
+            <li>
+              <strong>Semantic Segmentation:</strong> We utilize
+              <strong>Mask2Former</strong> (Swin-Large backbone), a
+              state-of-the-art transformer-based model, to generate initial
+              pixel-level predictions for wall regions.
+            </li>
+            <li>
+              <strong>Geometric Refinement:</strong> Raw segmentation masks
+              often merge adjacent walls. We implement a custom
+              <strong>WallRefiner</strong> that uses
+              <strong>Canny Edge Detection</strong> and
+              <strong>Hough Transform</strong> to detect vertical corner edges
+              within the wall mask, effectively splitting it into distinct
+              planes.
+            </li>
+            <li>
+              <strong>Texture Mapping:</strong> We compute the homography for
+              each wall plane to warp the target texture (wallpaper) into the
+              correct perspective.
+            </li>
+            <li>
+              <strong>Blending:</strong> A "Multiply" blending mode is used to
+              composite the new texture with the original image, preserving the
+              underlying luminance (shadows and highlights).
+            </li>
+          </ul>
+
+          <h3>Dataset</h3>
+          <p>
+            The system was developed and tested using the
+            <strong>ADE20K</strong> dataset for validation, along with
+            custom-captured indoor scenes ("OurSet") to test real-world
+            robustness.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3. Implementation -->
+      <section id="implementation">
+        <h2>3. Implementation</h2>
+        <div class="content-block">
+          <h3>Tech Stack</h3>
+          <ul class="tech-stack">
+            <li><strong>Language:</strong> Python 3.10+</li>
+            <li>
+              <strong>Deep Learning:</strong> PyTorch, Hugging Face Transformers
+              (for Mask2Former)
+            </li>
+            <li>
+              <strong>Computer Vision:</strong> OpenCV (cv2) for geometric
+              processing and image manipulation
+            </li>
+            <li>
+              <strong>Data Handling:</strong> NumPy, PIL, Hugging Face Datasets
+            </li>
+            <li><strong>Visualization:</strong> Matplotlib</li>
+          </ul>
+
+          <h3>Engineering Challenges</h3>
+          <p>
+            A major implementation challenge was the
+            <strong>"Corner Problem"</strong>. Semantic segmentation models
+            treat all walls as a single "wall" class, ignoring geometry. We
+            engineered a robust splitting algorithm that:
+          </p>
+          <ol>
+            <li>Filters edges to find only those internal to the wall mask.</li>
+            <li>
+              Filters Hough lines by angle to strictly target vertical wall
+              intersections.
+            </li>
+            <li>
+              Approximates the resulting blobs into clean 4-point polygons for
+              homography calculation.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 4. Results -->
+      <section id="results">
+        <h2>4. Results</h2>
+        <div class="content-block">
+          <h3>Qualitative Results</h3>
+          <p>
+            Below are examples of the system in action, showing the pipeline
+            stages: Input &rarr; Segmentation &rarr; Splitting &rarr; Final
+            Texture Overlay.
+          </p>
+
+          <div class="gallery">
+            <div class="gallery-item">
+              <div class="placeholder-image large">
+                <p>[PLACEHOLDER: Result Image Set 1]</p>
+                <p>
+                  (Original Image | Segmentation Mask | Split Polygons | Final
+                  Output)
+                </p>
+              </div>
+              <p class="caption">
+                Fig 2. Texture transfer on a complex living room scene.
+              </p>
+            </div>
+            <div class="gallery-item">
+              <div class="placeholder-image large">
+                <p>[PLACEHOLDER: Result Image Set 2]</p>
+                <p>
+                  (Original Image | Segmentation Mask | Split Polygons | Final
+                  Output)
+                </p>
+              </div>
+              <p class="caption">
+                Fig 3. Handling multiple adjacent walls in a hallway.
+              </p>
+            </div>
+          </div>
+
+          <h3>Quantitative Evaluation</h3>
+          <p>
+            We evaluated our segmentation and splitting accuracy against
+            manually annotated ground truth.
+          </p>
+
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>IoU (Intersection over Union)</th>
+                <th>Wall Detection Accuracy</th>
+                <th>Inference Time (s)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Baseline (Color Clustering)</td>
+                <td>[PLACEHOLDER]</td>
+                <td>[PLACEHOLDER]</td>
+                <td>[PLACEHOLDER]</td>
+              </tr>
+              <tr>
+                <td><strong>Ours (Mask2Former + Refiner)</strong></td>
+                <td><strong>[PLACEHOLDER]</strong></td>
+                <td><strong>[PLACEHOLDER]</strong></td>
+                <td><strong>[PLACEHOLDER]</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Comparison</h3>
+          <div class="placeholder-image">
+            <p>[PLACEHOLDER: Visual comparison with baseline method]</p>
+            <p><em>Fig 4. Comparison of Our Method vs. Naive Homography</em></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Discussion -->
+      <section id="discussion">
+        <h2>5. Discussion</h2>
+        <div class="content-block">
+          <h3>Findings & Implications</h3>
+          <p>
+            Our results demonstrate that while modern semantic segmentation is
+            powerful, it lacks geometric understanding. The hybrid approach of
+            <strong
+              >Deep Learning (for semantics) + Classical CV (for
+              geometry)</strong
+            >
+            proved superior to using either approach in isolation.
+          </p>
+
+          <h3>Limitations & Challenges</h3>
+          <ul>
+            <li>
+              <strong>Occlusions:</strong> Furniture blocking the wall-floor
+              boundary can sometimes confuse the polygon approximation.
+            </li>
+            <li>
+              <strong>Complex Geometry:</strong> Non-planar walls (curved
+              surfaces) are currently modeled as flat planes.
+            </li>
+          </ul>
+
+          <h3>Future Work</h3>
+          <p>
+            Future extensions could include implementing
+            <strong>PlaneRCNN</strong> for 3D-aware segmentation or integrating
+            a monocular depth estimation model (like MiDaS) to handle occlusions
+            more accurately.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6. Video -->
+      <section id="video">
+        <h2>6. Presentation Video</h2>
+        <div class="content-block center-text">
+          <p>
+            Watch our 5-minute project presentation explaining the technical
+            details and results.
+          </p>
+
+          <div class="video-placeholder">
+            <p>[PLACEHOLDER: Embed YouTube/Vimeo Link Here]</p>
+            <a href="#" class="btn">Watch Video</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container">
+        <p>&copy; 2025 Wall Designer Tool. CS566 Final Project.</p>
+      </div>
+    </footer>
+  </body>
+</html>

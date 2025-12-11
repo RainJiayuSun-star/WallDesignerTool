@@ -9,14 +9,16 @@ from PIL import Image
 from datasets import load_dataset
 
 # Import modular components
-from segmentation import Mask2FormerSegmentation
+from segmentation import Mask2FormerSegmentation, OneFormerSegmentation
 from splitting import CannyHoughSplitting, WallRefinerSplitting, ContourCornerSplitting, RobustCornerSplitting, CeilingKinkSplitting, CeilingAndFloorKinkSplitting
 from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping
+
 
 def get_ade20k_palette():
     np.random.seed(42)
     palette = np.random.randint(0, 255, size=(151, 3), dtype=np.uint8)
     return palette
+
 
 def visualize_prediction(image, pred_map, ax, title="Prediction", target_ids=None):
     palette = get_ade20k_palette()
@@ -29,7 +31,8 @@ def visualize_prediction(image, pred_map, ax, title="Prediction", target_ids=Non
     ax.imshow(image)
     ax.imshow(color_seg, alpha=0.5)
     ax.set_title(title)
-    ax.axis('off')
+    ax.axis("off")
+
 
 def check_ade20k_criteria(example):
     # 1. Check scene sequence
@@ -143,21 +146,55 @@ def load_examples(args):
             
             if not examples:
                 print("No matching examples found.")
-                
         except Exception as e:
             print(f"Error loading dataset: {e}")
     return examples
 
+
 def main():
     parser = argparse.ArgumentParser(description="Wall Designer Tool Pipeline")
-    parser.add_argument("--segmentationMethod", type=str, default="mask2former", choices=["mask2former"], help="Method for wall segmentation")
-    parser.add_argument("--splittingMethod", type=str, default="ceilingKink", choices=["cannyhough", "refiner", "contourCorner", "ceilingKink", "ceilingFloorKink"], help="Method for splitting connected walls")
-    parser.add_argument("--textureMappingMethod", type=str, default="maskedPerspective", choices=["homographyMultiply", "maskedPerspective"], help="Method for applying texture")
-    
-    parser.add_argument("--local", action="store_true", help="Use local images from --dir")
-    parser.add_argument("--dir", type=str, default=os.path.join(os.path.dirname(__file__), "ourSet"), help="Directory containing local images")
-    parser.add_argument("--texture", type=str, default=os.path.join(os.path.dirname(__file__), "dummy_texture.png"), help="Path to texture file")
-    
+    parser.add_argument(
+        "--segmentationMethod",
+        type=str,
+        default="mask2former",
+        choices=["mask2former", "oneformer", "segformer", "nyu"],
+        help="Method for wall segmentation",
+    )
+    parser.add_argument(
+        "--splittingMethod",
+        type=str,
+        default="ceilingKink",
+        choices=["cannyhough", "refiner", "contourCorner", "ceilingKink", "ceilingFloorKink"],
+        help="Method for splitting connected walls",
+    )
+    parser.add_argument(
+        "--textureMappingMethod",
+        type=str,
+        default="maskedPerspective",
+        choices=["homographyMultiply", "maskedPerspective"],
+        help="Method for applying texture",
+    )
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default=None,
+        help="HuggingFace Model ID (overrides default for selected method)",
+    )
+    parser.add_argument(
+        "--local", action="store_true", help="Use local images from --dir"
+    )
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default=os.path.join(os.path.dirname(__file__), "ourSet"),
+        help="Directory containing local images",
+    )
+    parser.add_argument(
+        "--texture",
+        type=str,
+        default=os.path.join(os.path.dirname(__file__), "dummy_texture.png"),
+        help="Path to texture file",
+    )
     parser.add_argument("--num_examples", type=int, default=10, help="Number of random examples to fetch from ADE20K")
     parser.add_argument("--output_dir", type=str, default="out", help="Directory to save results")
     parser.add_argument("--show", action="store_true", help="Show plots interactively")
@@ -166,8 +203,29 @@ def main():
 
     # 1. Initialize Components
     if args.segmentationMethod == "mask2former":
-        segmenter = Mask2FormerSegmentation()
-    
+        kwargs = {"model_id": args.model_id} if args.model_id else {}
+        segmenter = Mask2FormerSegmentation(**kwargs)
+    elif args.segmentationMethod == "oneformer":
+        kwargs = {"model_id": args.model_id} if args.model_id else {}
+        segmenter = OneFormerSegmentation(**kwargs)
+    elif args.segmentationMethod == "segformer":
+        from segmentation import SegFormerSegmentation
+
+        kwargs = {"model_id": args.model_id} if args.model_id else {}
+        segmenter = SegFormerSegmentation(**kwargs)
+    elif args.segmentationMethod == "nyu":
+        print("--- NYU Depth V2 Specialist ---")
+        print(
+            "Note: Official semantic segmentation checkpoints for NYU are rare on HF Hub."
+        )
+        print(
+            "Using SegFormer architecture. If you have a specific NYU checkpoint, pass it via --model_id."
+        )
+        from segmentation import NyuSegmentation
+
+        kwargs = {"model_id": args.model_id} if args.model_id else {}
+        segmenter = NyuSegmentation(**kwargs)
+
     if args.splittingMethod == "cannyhough":
         splitter = CannyHoughSplitting()
     elif args.splittingMethod == "refiner":
@@ -181,7 +239,6 @@ def main():
         splitter = CeilingKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin_top=5)
     elif args.splittingMethod == "ceilingFloorKink":
         splitter = CeilingAndFloorKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin=5)
-        
     if args.textureMappingMethod == "homographyMultiply":
         mapper = HomographyMultiplyMapping(args.texture)
     elif args.textureMappingMethod == "maskedPerspective":
@@ -207,28 +264,28 @@ def main():
         
         image = example['image']
         image_np = np.array(image)
-        
+
         # A. Segmentation
         print(f"[{idx+1}/{num_examples}] Segmenting {filename_raw}...")
         pred_map, wall_ids = segmenter.segment(image)
-        
+
         # B. Splitting
         print(f"[{idx+1}/{num_examples}] Splitting {filename_raw}...")
         full_wall_mask = np.zeros(pred_map.shape, dtype=np.uint8)
         for w_id in wall_ids:
-            full_wall_mask[pred_map == w_id] = 1 # Keep 0/1 for now
-            
+            full_wall_mask[pred_map == w_id] = 1  # Keep 0/1 for now
+
         # Ensure mask is correct format if needed by splitter, but our splitter handles it.
         # WallRefinerSplitting expects 0-255 internally or handles 0-1.
         
         # RobustCornerSplitting can use the image for verification
         segments, polygons = splitter.split(full_wall_mask, image_np)
-        
+
         # C. Mapping
         print(f"[{idx+1}/{num_examples}] Mapping texture for {filename_raw}...")
         # Prepare full_wall_mask as 0-255/bool for mapper if needed
         full_wall_mask_255 = (full_wall_mask * 255).astype(np.uint8)
-        
+
         textured_image = mapper.apply(image_np, polygons, full_mask=full_wall_mask_255)
 
         # D. Visualization & Saving
@@ -288,6 +345,7 @@ def main():
         print("Show mode enabled, but plots were saved and closed. Use file viewer to inspect.")
     
     print("Done.")
+
 
 if __name__ == "__main__":
     main()

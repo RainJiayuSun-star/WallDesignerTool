@@ -1,0 +1,5 @@
+image,model,iou,dice,wall_coverage_pct,runtime_sec,num_wall_segments
+Bhinu.png,Mask2Former (ADE20K),,,51.038016962186106,86.08517622947693,1
+Bhinu.png,OneFormer (ADE20K),,,48.84653755406483,88.30957412719727,1
+Bhinu.png,SegFormer (ADE20K),,,55.53482195347274,91.46829509735107,1
+Bhinu.png,SegFormer (NYU),,,55.53482195347274,88.12682223320007,1
