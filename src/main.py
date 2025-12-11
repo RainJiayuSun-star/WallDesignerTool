@@ -97,7 +97,59 @@ def check_ade20k_criteria(example):
 
 def load_examples(args):
     examples = []
-    if args.local:
+    if args.filelist:
+        # Process images from filelist - search in HuggingFace dataset
+        if not os.path.exists(args.filelist):
+            print(f"Filelist {args.filelist} does not exist.")
+            return []
+        
+        print(f"Loading images from filelist {args.filelist}...")
+        print(f"Searching for files in ADE20K dataset...")
+        
+        # Read filenames from file
+        with open(args.filelist, 'r') as f:
+            target_filenames = [line.strip() for line in f if line.strip()]
+        
+        # Create a set for faster lookup
+        target_filenames_set = set(target_filenames)
+        found_filenames = set()
+        
+        try:
+            # Load dataset in streaming mode
+            dataset = load_dataset("1aurent/ADE20K", split="validation", streaming=True)
+            iterator = iter(dataset)
+            
+            print(f"Searching for {len(target_filenames)} files in dataset...")
+            checked = 0
+            
+            # Iterate through dataset to find matching filenames
+            while len(found_filenames) < len(target_filenames):
+                try:
+                    ex = next(iterator)
+                    checked += 1
+                    if checked % 1000 == 0:
+                        print(f"Checked {checked} examples... Found {len(found_filenames)}/{len(target_filenames)}")
+                    
+                    ex_filename = ex.get('filename', '')
+                    if ex_filename in target_filenames_set:
+                        examples.append(ex)
+                        found_filenames.add(ex_filename)
+                        print(f"Found: {ex_filename}")
+                        
+                except StopIteration:
+                    print("End of dataset reached.")
+                    break
+            
+            # Check which files were not found
+            not_found = target_filenames_set - found_filenames
+            for filename in not_found:
+                print(f"File not found: {filename}")
+            
+            if not examples:
+                print(f"No images found from filelist {args.filelist}")
+        except Exception as e:
+            print(f"Error loading dataset: {e}")
+    elif args.local:
         print(f"Loading local images from {args.dir}...")
         if not os.path.exists(args.dir):
             print(f"Directory {args.dir} does not exist.")
@@ -198,6 +250,12 @@ def main():
     parser.add_argument("--num_examples", type=int, default=10, help="Number of random examples to fetch from ADE20K")
     parser.add_argument("--output_dir", type=str, default="out", help="Directory to save results")
     parser.add_argument("--show", action="store_true", help="Show plots interactively")
+    parser.add_argument(
+        "--filelist",
+        type=str,
+        default=None,
+        help="Path to text file containing filenames (one per line) to process. Files will be searched in the HuggingFace ADE20K dataset by filename field.",
+    )
 
     args = parser.parse_args()
 
