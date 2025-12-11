@@ -118,3 +118,11 @@ The final output is a structured report enabling direct comparison between the M
 I have incorporated the detailed explanation into the `README.md` format under the heading **How Evaluation and Benchmarking Works**.
 
 Would you like to review the code needed to calculate the IoU metric?
+
+Note: metadata_filtered.csv contains files that are matched under the following conditions:
+```
+scene - indoor,home or hotel
+objects - "raw_name": "wall",
+    "occluded": false,
+    "crop": false
+```
