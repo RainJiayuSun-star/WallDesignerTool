@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
-import itertools
 from datasets import load_dataset
 
 # Import modular components
@@ -32,6 +31,67 @@ def visualize_prediction(image, pred_map, ax, title="Prediction", target_ids=Non
     ax.set_title(title)
     ax.axis('off')
 
+def check_ade20k_criteria(example):
+    # 1. Check scene sequence
+    # scene has [ indoor, home or hotel ] both
+    scene_labels = example.get('scene', [])
+    if not scene_labels:
+        return False
+    
+    # scene_labels might be a list of strings or list of ints (ClassLabel)
+    # We convert to string and lower case to be safe if they are strings.
+    # If they are ints, this check will fail unless we have the mapping, 
+    # but based on the prompt we assume they are strings or we match string representation.
+    scene_str = [str(s).lower() for s in scene_labels]
+    
+    has_indoor = False
+    has_home_or_hotel = False
+    
+    for s in scene_str:
+        if 'indoor' in s:
+            has_indoor = True
+        if 'home' in s or 'hotel' in s:
+            has_home_or_hotel = True
+            
+    if not (has_indoor and has_home_or_hotel):
+        return False
+        
+    # 2. Check objects list
+    # The user provided example shows a list of dicts.
+    # HF datasets might return dict of lists. We handle both.
+    objects = example.get('objects', [])
+    if not objects:
+        return False
+        
+    has_valid_wall = False
+    
+    if isinstance(objects, list):
+        # List of dicts
+        for obj in objects:
+            raw_name = obj.get('raw_name')
+            occluded = obj.get('occluded')
+            crop = obj.get('crop')
+            
+            if raw_name == 'wall' and (occluded is False) and (crop is False):
+                has_valid_wall = True
+                break
+    elif isinstance(objects, dict):
+        # Dict of lists (HF Sequence)
+        raw_names = objects.get('raw_name', [])
+        occluded_list = objects.get('occluded', [])
+        cropped_list = objects.get('crop', [])
+        
+        # Ensure lists are same length
+        if len(raw_names) == len(occluded_list) == len(cropped_list):
+            for i in range(len(raw_names)):
+                if (raw_names[i] == 'wall' and 
+                    occluded_list[i] is False and 
+                    cropped_list[i] is False):
+                    has_valid_wall = True
+                    break
+            
+    return has_valid_wall
+
 def load_examples(args):
     examples = []
     if args.local:
@@ -52,12 +112,38 @@ def load_examples(args):
         if not examples:
             print(f"No PNG images found in {args.dir}")
     else:
-        print("Loading ADE20K dataset stream...")
+        print(f"Loading ADE20K dataset stream with filtering for {args.num_examples} examples...")
         try:
+            # Load dataset in streaming mode
             dataset = load_dataset("1aurent/ADE20K", split="validation", streaming=True)
-            examples = list(itertools.islice(dataset, 12, 14)) # Load 2 examples
-            for i, ex in enumerate(examples):
-                print(f"Loaded dataset example {i}: {ex.get('filename', 'Unknown')}")
+            
+            # Shuffle with buffer to get random samples
+            dataset = dataset.shuffle(seed=42, buffer_size=1000)
+            
+            iterator = iter(dataset)
+            found_count = 0
+            target_count = args.num_examples # Sample N random photos
+            
+            print("Searching for matching examples...")
+            checked = 0
+            while found_count < target_count:
+                try:
+                    ex = next(iterator)
+                    checked += 1
+                    if checked % 100 == 0:
+                        print(f"Checked {checked} examples...")
+                except StopIteration:
+                    print("End of dataset reached.")
+                    break
+                
+                if check_ade20k_criteria(ex):
+                     examples.append(ex)
+                     print(f"Found matching example: {ex.get('filename', 'Unknown')}")
+                     found_count += 1
+            
+            if not examples:
+                print("No matching examples found.")
+                
         except Exception as e:
             print(f"Error loading dataset: {e}")
     return examples
@@ -72,6 +158,10 @@ def main():
     parser.add_argument("--dir", type=str, default=os.path.join(os.path.dirname(__file__), "ourSet"), help="Directory containing local images")
     parser.add_argument("--texture", type=str, default=os.path.join(os.path.dirname(__file__), "dummy_texture.png"), help="Path to texture file")
     
+    parser.add_argument("--num_examples", type=int, default=10, help="Number of random examples to fetch from ADE20K")
+    parser.add_argument("--output_dir", type=str, default="out", help="Directory to save results")
+    parser.add_argument("--show", action="store_true", help="Show plots interactively")
+
     args = parser.parse_args()
 
     # 1. Initialize Components
@@ -102,24 +192,28 @@ def main():
     if not examples:
         return
 
-    num_examples = len(examples)
-    # 4 columns: Original, Segmentation, Splitting, Texture
-    fig, axes = plt.subplots(num_examples, 4, figsize=(24, 6 * num_examples))
-    if num_examples == 1:
-        axes = axes.reshape(1, -1)
+    # Create output directory
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+        print(f"Created output directory: {args.output_dir}")
 
+    num_examples = len(examples)
     print(f"Processing {num_examples} examples...")
 
     for idx, example in enumerate(examples):
+        filename_raw = example.get('filename', f"example_{idx+1}")
+        # Sanitize filename if needed
+        filename_base = os.path.splitext(os.path.basename(filename_raw))[0]
+        
         image = example['image']
         image_np = np.array(image)
         
         # A. Segmentation
-        print(f"Segmenting example {idx+1}...")
+        print(f"[{idx+1}/{num_examples}] Segmenting {filename_raw}...")
         pred_map, wall_ids = segmenter.segment(image)
         
         # B. Splitting
-        print(f"Splitting example {idx+1}...")
+        print(f"[{idx+1}/{num_examples}] Splitting {filename_raw}...")
         full_wall_mask = np.zeros(pred_map.shape, dtype=np.uint8)
         for w_id in wall_ids:
             full_wall_mask[pred_map == w_id] = 1 # Keep 0/1 for now
@@ -131,21 +225,24 @@ def main():
         segments, polygons = splitter.split(full_wall_mask, image_np)
         
         # C. Mapping
-        print(f"Mapping texture for example {idx+1}...")
+        print(f"[{idx+1}/{num_examples}] Mapping texture for {filename_raw}...")
         # Prepare full_wall_mask as 0-255/bool for mapper if needed
         full_wall_mask_255 = (full_wall_mask * 255).astype(np.uint8)
         
         textured_image = mapper.apply(image_np, polygons, full_mask=full_wall_mask_255)
 
-        # D. Visualization
+        # D. Visualization & Saving
+        
+        # Create a figure for this example
+        fig, axes = plt.subplots(1, 4, figsize=(24, 6))
+        
         # Col 1: Original
-        axes[idx, 0].imshow(image)
-        title = example.get('filename', f"Example {idx+1}")
-        axes[idx, 0].set_title(title)
-        axes[idx, 0].axis('off')
+        axes[0].imshow(image)
+        axes[0].set_title(f"{filename_raw}")
+        axes[0].axis('off')
 
         # Col 2: Segmentation (Wall Blob)
-        visualize_prediction(image, pred_map, axes[idx, 1], title="Segmentation (Wall Blob)", target_ids=wall_ids)
+        visualize_prediction(image, pred_map, axes[1], title="Segmentation (Wall Blob)", target_ids=wall_ids)
 
         # Col 3: Splitting (Wall Edges/Polygons)
         vis_split = image_np.copy()
@@ -164,17 +261,32 @@ def main():
                 cv2.putText(vis_split, str(i+1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
                 cv2.putText(debug_img, str(i+1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         
-        axes[idx, 2].imshow(debug_img)
-        axes[idx, 2].set_title(f"Splitting (Red=Ceiling)")
-        axes[idx, 2].axis('off')
+        axes[2].imshow(debug_img)
+        axes[2].set_title(f"Splitting (Red=Ceiling)")
+        axes[2].axis('off')
 
         # Col 4: Texture Applied
-        axes[idx, 3].imshow(textured_image)
-        axes[idx, 3].set_title("Texture Applied")
-        axes[idx, 3].axis('off')
+        axes[3].imshow(textured_image)
+        axes[3].set_title("Texture Applied")
+        axes[3].axis('off')
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = os.path.join(args.output_dir, f"{filename_base}_visualization.png")
+        plt.savefig(plot_path)
+        print(f"Saved visualization to {plot_path}")
+        plt.close(fig) # Close figure to free memory
+        
+        # Save textured image separately
+        tex_path = os.path.join(args.output_dir, f"{filename_base}_textured.png")
+        # Convert RGB to BGR for cv2
+        cv2.imwrite(tex_path, cv2.cvtColor(textured_image, cv2.COLOR_RGB2BGR))
+        print(f"Saved textured image to {tex_path}")
+
+    if args.show:
+        print("Show mode enabled, but plots were saved and closed. Use file viewer to inspect.")
+    
     print("Done.")
 
 if __name__ == "__main__":
