@@ -17,7 +17,7 @@ if __package__ is None:
         SegFormerSegmentation,
         NyuSegmentation,
     )
-    from metrics import calculate_iou, calculate_dice  # type: ignore
+    from metrics import calculate_iou, calculate_dice, calculate_boundary_fscore  # type: ignore
     from main import load_ground_truth  # type: ignore
 else:
     from .segmentation import (
@@ -26,7 +26,7 @@ else:
         SegFormerSegmentation,
         NyuSegmentation,
     )
-    from .metrics import calculate_iou, calculate_dice
+    from .metrics import calculate_iou, calculate_dice, calculate_boundary_fscore
     from .main import load_ground_truth
 
 
@@ -179,9 +179,10 @@ def main():
             try:
                 iou_score = calculate_iou(pred_binary_mask, gt_binary_mask)
                 dice_score = calculate_dice(pred_binary_mask, gt_binary_mask)
+                boundary_fscore = calculate_boundary_fscore(pred_binary_mask, gt_binary_mask, tolerance=2)
             except Exception as e:
                 print(f"Error calculating metrics for {image_name}: {e}")
-                iou_score = dice_score = np.nan
+                iou_score = dice_score = boundary_fscore = np.nan
 
             # Log
             result_entry = {
@@ -190,12 +191,14 @@ def main():
                 "segmentation_method": model_name,
                 "iou": iou_score,
                 "dice_coefficient": dice_score,
+                "boundary_fscore": boundary_fscore,
                 "runtime_sec": runtime_model,
             }
             benchmark_data.append(result_entry)
 
             if not np.isnan(iou_score) and not np.isnan(dice_score):
-                print(f"  > IoU: {iou_score:.4f} | Dice: {dice_score:.4f} | Runtime: {runtime_model:.4f}s")
+                boundary_str = f"{boundary_fscore:.4f}" if not np.isnan(boundary_fscore) else "N/A"
+                print(f"  > IoU: {iou_score:.4f} | Dice: {dice_score:.4f} | Boundary F-Score: {boundary_str} | Runtime: {runtime_model:.4f}s")
 
     # Aggregate
     if benchmark_data:
@@ -204,6 +207,7 @@ def main():
         grouped = results_df.groupby("model_name").agg(
             mean_iou=("iou", "mean"),
             mean_dice=("dice_coefficient", "mean"),
+            mean_boundary_fscore=("boundary_fscore", "mean"),
             avg_runtime=("runtime_sec", "mean"),
             count=("image_file", "count"),
         )
@@ -213,6 +217,7 @@ def main():
         for model_name, row in grouped.iterrows():
             print(
                 f"{model_name}: Mean IoU={row.mean_iou:.4f} | Mean Dice={row.mean_dice:.4f} | "
+                f"Mean Boundary F-Score={row.mean_boundary_fscore:.4f} | "
                 f"Avg Runtime={row.avg_runtime:.4f}s over {int(row['count'])} images"
             )
         print("=============================================")

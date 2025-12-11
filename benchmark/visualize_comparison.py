@@ -4,7 +4,7 @@ Visualization script for comparing segmentation model benchmark results.
 
 This script loads benchmark CSV files for Mask2Former, OneFormer, NYU, and SegFormer
 and creates comprehensive visualizations comparing all models across IoU,
-Dice Coefficient, and Runtime metrics.
+Dice Coefficient, Boundary F-Score, and Runtime metrics.
 """
 
 import pandas as pd
@@ -60,7 +60,7 @@ def load_benchmark_data(csv_paths):
 def calculate_statistics(dataframes):
     """Calculate summary statistics for all models."""
     stats = {}
-    metrics = ["iou", "dice_coefficient", "runtime_sec"]
+    metrics = ["iou", "dice_coefficient", "boundary_fscore", "runtime_sec"]
 
     for metric in metrics:
         stats[metric] = {}
@@ -80,7 +80,7 @@ def calculate_statistics(dataframes):
 
 def plot_distribution_comparison(df_combined, output_dir):
     """Create distribution plots for all metrics."""
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig, axes = plt.subplots(2, 4, figsize=(24, 12))
     fig.suptitle(
         "Distribution Comparison: All Models",
         fontsize=16,
@@ -90,6 +90,7 @@ def plot_distribution_comparison(df_combined, output_dir):
     metrics = [
         ("iou", "IoU Score", "Intersection over Union"),
         ("dice_coefficient", "Dice Coefficient", "Dice Similarity Coefficient"),
+        ("boundary_fscore", "Boundary F-Score", "Boundary F1 Score"),
         ("runtime_sec", "Runtime (seconds)", "Inference Time"),
     ]
 
@@ -146,12 +147,13 @@ def plot_distribution_comparison(df_combined, output_dir):
 
 def plot_box_plots(df_combined, output_dir):
     """Create box plots for all metrics."""
-    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
     fig.suptitle("Box Plot Comparison: All Models", fontsize=16, fontweight="bold")
 
     metrics = [
         ("iou", "IoU Score"),
         ("dice_coefficient", "Dice Coefficient"),
+        ("boundary_fscore", "Boundary F-Score"),
         ("runtime_sec", "Runtime (seconds)"),
     ]
 
@@ -203,6 +205,7 @@ def plot_scatter_comparison(dataframes, output_dir):
     metrics = [
         ("iou", "IoU Score"),
         ("dice_coefficient", "Dice Coefficient"),
+        ("boundary_fscore", "Boundary F-Score"),
         ("runtime_sec", "Runtime (seconds)"),
     ]
 
@@ -283,12 +286,13 @@ def plot_statistics_summary(stats, output_dir):
     """Create a bar chart comparing mean and median statistics."""
     models = sorted(list(stats["iou"].keys()))
 
-    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    fig, axes = plt.subplots(2, 4, figsize=(24, 12))
     fig.suptitle("Summary Statistics Comparison", fontsize=16, fontweight="bold")
 
     metrics = [
         ("iou", "IoU Score"),
         ("dice_coefficient", "Dice Coefficient"),
+        ("boundary_fscore", "Boundary F-Score"),
         ("runtime_sec", "Runtime (seconds)"),
     ]
 
@@ -346,6 +350,7 @@ def print_statistics_table(stats):
     metrics = [
         ("iou", "IoU Score"),
         ("dice_coefficient", "Dice Coefficient"),
+        ("boundary_fscore", "Boundary F-Score"),
         ("runtime_sec", "Runtime (seconds)"),
     ]
 
@@ -426,6 +431,7 @@ def main():
     print("  - box_plot_comparison.png")
     print("  - scatter_comparison_iou.png")
     print("  - scatter_comparison_dice_coefficient.png")
+    print("  - scatter_comparison_boundary_fscore.png")
     print("  - scatter_comparison_runtime_sec.png")
     print("  - statistics_summary.png")
 

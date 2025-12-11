@@ -17,10 +17,10 @@ if __package__ is None:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, script_dir)
     from segmentation import Mask2FormerSegmentation  # type: ignore
-    from metrics import calculate_iou, calculate_dice  # type: ignore
+    from metrics import calculate_iou, calculate_dice, calculate_boundary_fscore  # type: ignore
 else:
     from .segmentation import Mask2FormerSegmentation
-    from .metrics import calculate_iou, calculate_dice
+    from .metrics import calculate_iou, calculate_dice, calculate_boundary_fscore
 
 # Clustering placeholder (not yet implemented for this benchmark focus)
 # from clustering import ClusteringSegmentation
@@ -242,9 +242,10 @@ def main():
             # IoU and Dice are calculated using the 0/1 predicted mask and 0/1 GT mask
             iou_m2f = calculate_iou(pred_binary_mask, gt_binary_mask)
             dice_m2f = calculate_dice(pred_binary_mask, gt_binary_mask)
+            boundary_fscore_m2f = calculate_boundary_fscore(pred_binary_mask, gt_binary_mask, tolerance=2)
         except Exception as e:
             print(f"Error calculating metrics for {image_name}: {e}")
-            iou_m2f = dice_m2f = np.nan
+            iou_m2f = dice_m2f = boundary_fscore_m2f = np.nan
             
         
         # D. Log Results
@@ -253,12 +254,13 @@ def main():
             'segmentation_method': 'Mask2Former',
             'iou': iou_m2f,
             'dice_coefficient': dice_m2f,
+            'boundary_fscore': boundary_fscore_m2f,
             'runtime_sec': runtime_m2f,
             # Add placeholders for clustering results here when implemented
         }
         benchmark_data.append(result_entry)
         
-        print(f"  > IoU: {iou_m2f:.4f} | Dice: {dice_m2f:.4f} | Runtime: {runtime_m2f:.4f}s")
+        print(f"  > IoU: {iou_m2f:.4f} | Dice: {dice_m2f:.4f} | Boundary F-Score: {boundary_fscore_m2f:.4f} | Runtime: {runtime_m2f:.4f}s")
 
 
     # 4. Final Aggregation and Save
@@ -268,12 +270,14 @@ def main():
         # Calculate aggregate means
         mean_iou = results_df['iou'].mean()
         mean_dice = results_df['dice_coefficient'].mean()
+        mean_boundary_fscore = results_df['boundary_fscore'].mean()
         avg_runtime = results_df['runtime_sec'].mean()
         
         print("\n=============================================")
         print("✅ BENCHMARK SUMMARY (Mask2Former)")
         print(f"Mean IoU: {mean_iou:.4f}")
         print(f"Mean Dice: {mean_dice:.4f}")
+        print(f"Mean Boundary F-Score: {mean_boundary_fscore:.4f}")
         print(f"Average Runtime: {avg_runtime:.4f} seconds")
         print("=============================================")
         
