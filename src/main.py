@@ -10,7 +10,7 @@ from datasets import load_dataset
 
 # Import modular components
 from segmentation import Mask2FormerSegmentation, OneFormerSegmentation
-from splitting import CannyHoughSplitting, WallRefinerSplitting, ContourCornerSplitting, RobustCornerSplitting, CeilingKinkSplitting, CeilingAndFloorKinkSplitting
+from splitting import CannyHoughSplitting, WallRefinerSplitting, ContourCornerSplitting, RobustCornerSplitting, CeilingKinkSplitting, CeilingAndFloorKinkSplitting, TrapezoidalDecompositionSplitting
 from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping
 
 
@@ -216,7 +216,7 @@ def main():
         "--splittingMethod",
         type=str,
         default="ceilingKink",
-        choices=["cannyhough", "refiner", "contourCorner", "ceilingKink", "ceilingFloorKink"],
+        choices=["cannyhough", "refiner", "contourCorner", "ceilingKink", "ceilingFloorKink", "trapezoidal"],
         help="Method for splitting connected walls",
     )
     parser.add_argument(
@@ -247,8 +247,9 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "dummy_texture.png"),
         help="Path to texture file",
     )
-    parser.add_argument("--num_examples", type=int, default=10, help="Number of random examples to fetch from ADE20K")
+    parser.add_argument("--num_examples", type=int, default=2, help="Number of random examples to fetch from ADE20K")
     parser.add_argument("--output_dir", type=str, default="out", help="Directory to save results")
+    parser.add_argument("--save", action="store_true", help="Save results to output directory")
     parser.add_argument("--show", action="store_true", help="Show plots interactively")
     parser.add_argument(
         "--filelist",
@@ -297,6 +298,8 @@ def main():
         splitter = CeilingKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin_top=5)
     elif args.splittingMethod == "ceilingFloorKink":
         splitter = CeilingAndFloorKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin=5)
+    elif args.splittingMethod == "trapezoidal":
+        splitter = TrapezoidalDecompositionSplitting()
     if args.textureMappingMethod == "homographyMultiply":
         mapper = HomographyMultiplyMapping(args.texture)
     elif args.textureMappingMethod == "maskedPerspective":
@@ -308,7 +311,7 @@ def main():
         return
 
     # Create output directory
-    if not os.path.exists(args.output_dir):
+    if args.save and not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
         print(f"Created output directory: {args.output_dir}")
 
@@ -387,20 +390,21 @@ def main():
 
         plt.tight_layout()
         
-        # Save plot
-        plot_path = os.path.join(args.output_dir, f"{filename_base}_visualization.png")
-        plt.savefig(plot_path)
-        print(f"Saved visualization to {plot_path}")
-        plt.close(fig) # Close figure to free memory
-        
-        # Save textured image separately
-        tex_path = os.path.join(args.output_dir, f"{filename_base}_textured.png")
-        # Convert RGB to BGR for cv2
-        cv2.imwrite(tex_path, cv2.cvtColor(textured_image, cv2.COLOR_RGB2BGR))
-        print(f"Saved textured image to {tex_path}")
+        if args.save:
+            # Save plot
+            plot_path = os.path.join(args.output_dir, f"{filename_base}_visualization.png")
+            plt.savefig(plot_path)
+            print(f"Saved visualization to {plot_path}")
+            plt.close(fig) # Close figure to free memory
+            
+            # Save textured image separately
+            tex_path = os.path.join(args.output_dir, f"{filename_base}_textured.png")
+            # Convert RGB to BGR for cv2
+            cv2.imwrite(tex_path, cv2.cvtColor(textured_image, cv2.COLOR_RGB2BGR))
+            print(f"Saved textured image to {tex_path}")
 
-    if args.show:
-        print("Show mode enabled, but plots were saved and closed. Use file viewer to inspect.")
+    if not args.save:
+        plt.show()
     
     print("Done.")
 

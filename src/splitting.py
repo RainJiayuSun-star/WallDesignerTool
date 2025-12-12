@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
 from scipy.signal import find_peaks
+import os
+import matplotlib.pyplot as plt
+from shapely.geometry import Polygon, LineString, MultiLineString, GeometryCollection
+from shapely.ops import unary_union, split
 
 class SplittingStrategy:
     def split(self, binary_mask, original_image):
@@ -858,3 +862,148 @@ class CeilingAndFloorKinkSplitting(SplittingStrategy):
         x, y, w, h = cv2.boundingRect(mask)
         poly = np.array([[x, y], [x+w, y], [x+w, y+h], [x, y+h]], dtype=np.int32)
         return [mask], [poly]
+
+class TrapezoidalDecompositionSplitting(SplittingStrategy):
+    def __init__(self, epsilon_factor=0.02, debug_dir="out/debug_splitting"):
+        self.epsilon_factor = epsilon_factor
+        self.debug_dir = debug_dir
+        os.makedirs(self.debug_dir, exist_ok=True)
+        self.step_count = 0
+
+    def _save_debug_plot(self, title, image, polygons=None, lines=None):
+        plt.figure(figsize=(10, 10))
+        plt.imshow(image, cmap='gray')
+        plt.title(title)
+        
+        if polygons:
+            for poly in polygons:
+                if isinstance(poly, Polygon):
+                    x, y = poly.exterior.xy
+                    plt.plot(x, y, 'r-', linewidth=2)
+                elif isinstance(poly, np.ndarray):
+                    poly_reshaped = poly.reshape(-1, 2)
+                    poly_closed = np.vstack([poly_reshaped, poly_reshaped[0]])
+                    plt.plot(poly_closed[:,0], poly_closed[:,1], 'r-', linewidth=2)
+
+        if lines:
+            for line in lines:
+                x, y = line.xy
+                plt.plot(x, y, 'g--', linewidth=1)
+
+        plt.axis('off')
+        plt.savefig(os.path.join(self.debug_dir, f"step_{self.step_count:02d}_{title.replace(' ', '_')}.png"))
+        plt.close()
+        self.step_count += 1
+
+    def split(self, binary_mask, original_image):
+        self.step_count = 0
+        h, w = binary_mask.shape
+        
+        # 1. Morphological Closing (Fill Bites)
+        kernel = np.ones((15, 15), np.uint8) # Large kernel
+        closed_mask = cv2.morphologyEx(binary_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
+        self._save_debug_plot("1_Morphological_Closing", closed_mask)
+
+        # 2. Contour Approximation
+        contours, _ = cv2.findContours(closed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours: return [], []
+        main_contour = max(contours, key=cv2.contourArea)
+        
+        epsilon = self.epsilon_factor * cv2.arcLength(main_contour, True)
+        approx = cv2.approxPolyDP(main_contour, epsilon, True)
+        approx = approx.squeeze()
+        
+        self._save_debug_plot("2_Contour_Approximation", closed_mask, polygons=[approx])
+
+        # 3. Create Shapely Polygon
+        if len(approx) < 3: return [], []
+        poly_shapely = Polygon(approx)
+        if not poly_shapely.is_valid:
+            poly_shapely = poly_shapely.buffer(0)
+
+        # 4. Vertical Decomposition
+        # Create vertical lines at every vertex
+        # Note: A pure trapezoidal decomposition also shoots rays from edge intersections,
+        # but for this wall application, shooting from vertices is usually sufficient to handle concave shapes.
+        
+        minx, miny, maxx, maxy = poly_shapely.bounds
+        unique_xs = sorted(list(set([p[0] for p in approx])))
+        
+        cut_lines = []
+        for x in unique_xs:
+            # Vertical line spanning height
+            line = LineString([(x, miny - 1), (x, maxy + 1)])
+            # Intersect with polygon to find the internal segments
+            intersection = poly_shapely.intersection(line)
+            
+            if intersection.is_empty:
+                continue
+                
+            if isinstance(intersection, LineString):
+                cut_lines.append(intersection)
+            elif isinstance(intersection, (MultiLineString, GeometryCollection)):
+                for geom in intersection.geoms:
+                    if isinstance(geom, LineString):
+                        cut_lines.append(geom)
+
+        self._save_debug_plot("3_Vertical_Cuts", closed_mask, polygons=[poly_shapely], lines=cut_lines)
+
+        # 5. Split the Polygon
+        splitter = unary_union(cut_lines)
+        result_collection = split(poly_shapely, splitter)
+        
+        trapezoids = []
+        for geom in result_collection.geoms:
+            if isinstance(geom, Polygon):
+                trapezoids.append(geom)
+
+        self._save_debug_plot("4_Trapezoids", closed_mask, polygons=trapezoids)
+
+        # 6. Convert back to OpenCV format
+        wall_polygons = []
+        wall_segments = []
+        
+        for trap in trapezoids:
+            x, y = trap.exterior.xy
+            pts = np.array([list(zip(x, y))], dtype=np.int32).squeeze()
+
+            # Remove the closing point if it's duplicated (Shapely adds it)
+            if len(pts) > 0 and np.array_equal(pts[0], pts[-1]):
+                pts = pts[:-1]
+            
+            if len(pts) == 3:
+                # Triangle: Duplicate the last point to make it a degenerate quad
+                pts = np.vstack([pts, pts[-1]])
+            
+            elif len(pts) > 4:
+                 # Simplify to 4 points
+                 epsilon = 0.01 * cv2.arcLength(pts, True)
+                 max_iter = 10
+                 iter_count = 0
+                 pts_simplified = pts
+                 while len(pts_simplified) > 4 and iter_count < max_iter:
+                     epsilon *= 1.5
+                     approx = cv2.approxPolyDP(pts, epsilon, True)
+                     pts_new = approx.squeeze()
+                     if len(pts_new) < 3: # Collapsed too much
+                         break
+                     pts_simplified = pts_new
+                     iter_count += 1
+                 pts = pts_simplified
+                 
+                 # If we over-collapsed to triangle or invalid, handle it
+                 if len(pts) == 3:
+                      pts = np.vstack([pts, pts[-1]])
+                 elif len(pts) < 3:
+                      # Last resort: Bounding Box
+                      rect = cv2.minAreaRect(np.array(trap.exterior.coords).astype(np.int32))
+                      box = cv2.boxPoints(rect)
+                      pts = box.astype(np.int32)
+
+            if len(pts) == 4:
+                wall_polygons.append(pts)
+                mask = np.zeros((h, w), dtype=np.uint8)
+                cv2.fillPoly(mask, [pts], 255)
+                wall_segments.append(mask)
+
+        return wall_segments, wall_polygons
