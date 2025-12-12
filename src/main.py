@@ -11,7 +11,7 @@ from datasets import load_dataset
 # Import modular components
 from segmentation import Mask2FormerSegmentation, OneFormerSegmentation
 from splitting import CannyHoughSplitting, WallRefinerSplitting, ContourCornerSplitting, RobustCornerSplitting, CeilingKinkSplitting, CeilingAndFloorKinkSplitting, TrapezoidalDecompositionSplitting
-from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping
+from mapping import HomographyMultiplyMapping, MaskedPerspectiveMapping, IntrinsicBlendingMapping
 
 
 def get_ade20k_palette():
@@ -223,8 +223,8 @@ def main():
         "--textureMappingMethod",
         type=str,
         default="maskedPerspective",
-        choices=["homographyMultiply", "maskedPerspective"],
-        help="Method for applying texture",
+        choices=["homographyMultiply", "maskedPerspective", "intrinsic"],
+        help="Method for applying texture. 'intrinsic' uses Retinex decomposition for better lighting.",
     )
     parser.add_argument(
         "--model_id",
@@ -300,10 +300,13 @@ def main():
         splitter = CeilingAndFloorKinkSplitting(epsilon_factor=0.003, bend_threshold=10, margin=5)
     elif args.splittingMethod == "trapezoidal":
         splitter = TrapezoidalDecompositionSplitting()
+    
     if args.textureMappingMethod == "homographyMultiply":
         mapper = HomographyMultiplyMapping(args.texture)
     elif args.textureMappingMethod == "maskedPerspective":
         mapper = MaskedPerspectiveMapping(args.texture)
+    elif args.textureMappingMethod == "intrinsic":
+        mapper = IntrinsicBlendingMapping(args.texture)
 
     # 2. Load Data
     examples = load_examples(args)

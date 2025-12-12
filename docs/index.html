@@ -296,6 +296,11 @@
             custom-captured indoor scenes ("OurSet") to test real-world
             robustness.
           </p>
+          <p>
+            <em>Note on Dataset Selection:</em> We shifted our primary evaluation dataset from ScanNet (proposed in the midterm) to ADE20K. 
+            While ScanNet is excellent for 3D tasks, ADE20K provides high-quality 2D semantic annotations that are more directly aligned with our single-image segmentation goal. 
+            Furthermore, state-of-the-art models like Mask2Former are natively optimized for the ADE20K benchmark, allowing for more standardized comparisons.
+          </p>
         </div>
       </section>
 

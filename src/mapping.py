@@ -215,3 +215,73 @@ class MaskedPerspectiveMapping(TextureMappingStrategy):
         rect[1] = pts[np.argmin(diff)]
         rect[3] = pts[np.argmax(diff)]
         return rect
+
+class IntrinsicBlendingMapping(MaskedPerspectiveMapping):
+    """
+    Advanced mapping that uses Intrinsic Decomposition (Retinex) to separate
+    Lighting (Shading) from Color (Albedo), allowing us to replace the wall's
+    albedo with the texture while preserving the original lighting.
+    """
+    def apply(self, original_image, wall_polygons, **kwargs):
+        full_mask = kwargs.get('full_mask')
+        if full_mask is None:
+            full_mask = np.zeros(original_image.shape[:2], dtype=np.uint8)
+            for poly in wall_polygons:
+                cv2.fillPoly(full_mask, [poly], 255)
+
+        # 1. Generate Perspective-Warped Texture (Same as parent)
+        texture_layer = np.zeros_like(original_image)
+        for poly in wall_polygons:
+            warped_segment = self._warp_texture_to_poly(original_image.shape, poly)
+            texture_layer = np.maximum(texture_layer, warped_segment)
+            
+        # 2. Extract Shading from Original Image
+        _, shading = self._intrinsic_decomposition_simple(original_image)
+        
+        # 3. Create Final Mask
+        valid_tex = np.sum(texture_layer, axis=2) > 0
+        final_mask = (full_mask > 0) & valid_tex
+        
+        # 4. Blend: Result = Texture * Shading
+        # We replace the original Albedo with the Texture, but keep the original Shading.
+        img_float = original_image.astype(float) / 255.0 # For unmasked areas
+        tex_float = texture_layer.astype(float) / 255.0
+        
+        blended = img_float.copy()
+        
+        # Apply texture * shading in the masked region
+        # Note: 'shading' is already normalized [0-1] from the helper
+        blended[final_mask] = tex_float[final_mask] * shading[final_mask]
+        
+        return (np.clip(blended, 0, 1) * 255).astype(np.uint8)
+
+    def _intrinsic_decomposition_simple(self, image):
+        """
+        Simple Retinex-based decomposition.
+        Returns (albedo, shading).
+        """
+        img_float = image.astype(np.float32) / 255.0
+        
+        # Luminance
+        luminance = (
+            0.299 * img_float[:, :, 0]
+            + 0.587 * img_float[:, :, 1]
+            + 0.114 * img_float[:, :, 2]
+        )
+        
+        # Estimate shading via Gaussian Blur (Low-pass filter)
+        kernel_size = max(15, min(image.shape[:2]) // 20)
+        if kernel_size % 2 == 0: kernel_size += 1
+        
+        shading_gray = cv2.GaussianBlur(
+            luminance, (kernel_size, kernel_size), sigmaX=kernel_size / 3
+        )
+        shading_gray = np.clip(shading_gray, 0.01, 1.0)
+        
+        shading = np.stack([shading_gray] * 3, axis=2)
+        
+        # Albedo = I / S
+        albedo = img_float / shading
+        albedo = np.clip(albedo, 0.0, 1.0)
+        
+        return albedo, shading
