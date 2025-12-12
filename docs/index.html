@@ -15,7 +15,14 @@
     <header>
       <div class="container">
         <h1>Wall Designer Tool</h1>
-        <p class="subtitle">CS566 Computer Vision Final Project</p>
+        <p class="subtitle">CS566 Computer Vision (Fall 2025S) Final Project </p>
+        <div class="team-members" style="margin-top: 0.5rem; margin-bottom: 2.5rem;">
+          <p>
+            <strong>Bhinu Puvva</strong> - puvvala@wisc.edu | 
+            <strong>Bala Shukla</strong> - shukla35@wisc.edu | 
+            <strong>Rain Jiayu Sun</strong> - jsun424@wisc.edu
+          </p>
+        </div>
         <nav>
           <ul>
             <li><a href="#motivation">Motivation</a></li>
@@ -30,9 +37,26 @@
     </header>
 
     <main class="container">
-      <!-- 1. Motivation -->
+      <!-- Video -->
+      <section id="video">
+        <h2>Presentation Video</h2>
+        <div class="content-block center-text">
+
+          <div class="video-container">
+            <iframe
+              src="https://www.youtube.com/embed/28DcFrfub-0"
+              title="Wall Designer Tool Presentation"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+            ></iframe>
+          </div>
+        </div>
+      </section>
+
+      <!-- Motivation -->
       <section id="motivation">
-        <h2>1. Motivation</h2>
+        <h2>Motivation</h2>
         <div class="content-block">
           <p
             style="
@@ -43,91 +67,227 @@
             "
           >
             <strong>See also:</strong> Check out our
-            <a href="midterm.html"><strong>Midterm Project Report</strong></a>
+            <!-- <a href="midterm.html"><strong>Midterm Project Report</strong></a> --> <!--no need to include midterm project report-->
             for details on our team, initial experiments, and methodology
             evolution.
           </p>
           <h3>Problem Statement</h3>
           <p>
-            This project tackles the challenge of
-            <strong
-              >realistic, perspective-correct texture transfer onto indoor
-              planar surfaces</strong
-            >
-            (specifically walls) from a single 2D image. While humans easily
-            perceive the 3D geometry of a room from a photograph, automating the
-            process of identifying walls and applying new textures (like
-            wallpaper or paint) while respecting perspective and lighting is a
-            complex computer vision task.
+            Modern AR and virtual-staging tools need to replace wall textures
+            (paint, wallpapers) in a realistic way. But this requires accurately
+            identifying planar surfaces from a single indoor image and applying
+            textures with correct perspective, geometry, and lighting.
           </p>
 
-          <h3>Importance</h3>
+          <h3>Research Question</h3>
           <p>
-            Applications for this technology are vast, ranging from
-            <strong>Augmented Reality (AR) interior design apps</strong> to
-            virtual staging for real estate. Existing solutions often require
-            manual annotation of room corners or expensive depth sensors. Our
-            goal is to automate this pipeline using modern segmentation models
-            and geometric computer vision techniques.
+            Can modern computer-vision methods reliably segment planar surfaces
+            from a single image to enable realistic, perspective-correct texture
+            transfer?
           </p>
 
-          <h3>Goals</h3>
+          <h3>Why this matters</h3>
           <ul>
-            <li>Accurately segment wall regions from a single RGB image.</li>
             <li>
-              Split connected wall segments into distinct planar surfaces.
+              AR interior design apps demand instant wall replacement - not a
+              slow manual process
             </li>
             <li>
-              Apply new textures that align with the perspective of each wall.
+              Traditional CV methods fail in messy, cluttered indoor scenes
             </li>
-            <li>Preserve realistic lighting and shadows.</li>
+            <li>
+              Realistic overlays require knowing where the wall is, its shape,
+              and perspective
+            </li>
+            <li>
+              A single-image solution enables scalable deployment: mobile apps,
+              real estate, home-renovation tools
+            </li>
+            <strong>Goal:</strong>
+            Build a pipeline that works robustly, fast, and without a lot of
+            manual work like photoshop or manual segmentation
+          </ul>
+
+          <h3>Gaps in Existing Research</h3>
+          <p>
+            Despite strong progress in semantic segmentation, critical gaps
+            remain:
+          </p>
+          <ul>
+            <li>
+              <strong>Fragmented Workflows:</strong> Existing research treats
+              segmentation, geometry extraction, and texture overlay as separate
+              problems, with no unified, reliable pipeline that connects all
+              three steps for planar surfaces.
+            </li>
+            <li>
+              <strong>Limited Practicality:</strong> Many AR systems depend on
+              depth sensors or assume clean, minimal environments, which makes
+              them unreliable in real indoor scenes with clutter, occlusions,
+              varied lighting, and complex wall textures.
+            </li>
+          </ul>
+          <p>Our work fills this gap by:</p>
+          <ul>
+            <li>
+              Benchmarking non-semantic vs. semantic segmentation to identify
+              optimal wall isolation methods.
+            </li>
+            <li>
+              Building a complete monocular pipeline that handles occlusion via
+              semantic masking and preserves lighting via intrinsic blending.
+            </li>
           </ul>
         </div>
       </section>
 
-      <!-- 2. Approach -->
+      <!-- Approach -->
       <section id="approach">
-        <h2>2. Approach</h2>
+        <h2>Approach</h2>
         <div class="content-block">
           <h3>Methodology Overview</h3>
           <p>
             We propose a three-stage pipeline to solve this problem:
-            <strong>Segmentation, Refinement (Splitting), and Overlay.</strong>
+            <strong
+              >Segmentation, Refinement (Splitting), and
+              Blending/Mapping.</strong
+            >
           </p>
 
-          <div class="placeholder-image">
-            <p>[PLACEHOLDER: Insert high-level pipeline diagram here]</p>
-            <p><em>Fig 1. System Architecture Diagram</em></p>
+          <div class="step-container">
+            <div class="step-text">
+              <h3>1. Segmentation</h3>
+              <p>
+                Initially we tried using simple edge detection (Hough Transform)
+                and color based clustering. Both these failed for 2 main reasons
+                (noise and a lack of semantic understanding).
+              </p>
+              <p>
+                We realized we needed a deep learning model with semantic
+                understanding. So we had a couple of options:
+              </p>
+              <ul>
+                <li>Mask2Former: Transformer-based, Swin backbone</li>
+                <li>OneFormer: Universal Segmentation Model</li>
+                <li>SegFormer/ NYU: Efficient Alternatives</li>
+              </ul>
+            </div>
+            <div class="step-image">
+              <figure style="margin: 0; text-align: center">
+                <img
+                  src="images/Segmentation.png"
+                  alt="Segmentation Comparison"
+                  style="
+                    width: 100%;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                  "
+                />
+                <figcaption
+                  style="margin-top: 10px; font-style: italic; color: #666"
+                >
+                  Fig 1. Segmentation Comparison
+                </figcaption>
+              </figure>
+            </div>
           </div>
 
-          <h3>Key Algorithms</h3>
-          <ul>
-            <li>
-              <strong>Semantic Segmentation:</strong> We utilize
-              <strong>Mask2Former</strong> (Swin-Large backbone), a
-              state-of-the-art transformer-based model, to generate initial
-              pixel-level predictions for wall regions.
-            </li>
-            <li>
-              <strong>Geometric Refinement:</strong> Raw segmentation masks
-              often merge adjacent walls. We implement a custom
-              <strong>WallRefiner</strong> that uses
-              <strong>Canny Edge Detection</strong> and
-              <strong>Hough Transform</strong> to detect vertical corner edges
-              within the wall mask, effectively splitting it into distinct
-              planes.
-            </li>
-            <li>
-              <strong>Texture Mapping:</strong> We compute the homography for
-              each wall plane to warp the target texture (wallpaper) into the
-              correct perspective.
-            </li>
-            <li>
-              <strong>Blending:</strong> A "Multiply" blending mode is used to
-              composite the new texture with the original image, preserving the
-              underlying luminance (shadows and highlights).
-            </li>
-          </ul>
+          <div class="step-container">
+            <div class="step-text">
+              <h3>2. Splitting Method</h3>
+              <p>
+                We explored image-based methods like Canny Edge + Hough
+                Transform to detect vertical dividers and Vertical Projection
+                (summing gradients) to find wall breaks, but these were too
+                sensitive to noise (like wallpaper patterns) or failed in dark
+                corners.
+              </p>
+              <p>
+                We settled on
+                <strong
+                  >Geometric Contour Analysis (specifically
+                  CeilingKinkSplitting)</strong
+                >. The rationale is that the ceiling line is the most reliable
+                feature in a room, whereas the floor is often occluded by
+                furniture; by detecting geometric "kinks" (corners) in the
+                ceiling profile, we can reliably separate walls and
+                mathematically infer the floor line to create clean trapezoidal
+                planes, even when the actual floor boundary is hidden.
+              </p>
+            </div>
+            <div class="step-image">
+              <figure style="margin: 0; text-align: center">
+                <img
+                  src="images/splitting.png"
+                  alt="Splitting Image"
+                  style="
+                    width: 100%;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                  "
+                />
+                <figcaption
+                  style="margin-top: 10px; font-style: italic; color: #666"
+                >
+                  Fig 2. Splitting Overview
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="step-container">
+            <div class="step-text">
+              <h3>3. Mapping Method</h3>
+              <p>
+                We initially tried Standard Homography, which warped the texture
+                to fit the detected polygon, but this often caused "twisting"
+                artifacts on slanted walls (due to automatic point reordering)
+                and painted over objects.
+              </p>
+              <p>
+                We settled on <strong>Masked Perspective Mapping</strong>. This
+                approach is superior because it decouples geometry from
+                visibility: it uses the Geometric Polygon strictly to define the
+                correct perspective warp (trusting the specific vertex order to
+                prevent twists) and then applies the Semantic Mask as a "cookie
+                cutter" to handle occlusions (preventing texture from spilling
+                onto lamps or plants), finally using Multiply Blending to
+                preserve the room's natural shadows and lighting.
+              </p>
+            </div>
+            <div class="step-image">
+              <figure style="margin: 0; text-align: center">
+                <img
+                  src="images/mapping.png"
+                  alt="Mapped Image"
+                  style="
+                    width: 100%;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                  "
+                />
+                <figcaption
+                  style="margin-top: 10px; font-style: italic; color: #666"
+                >
+                  Fig 3. Mapping/Blending
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <h3>Putting it all together</h3>
+          <div class="placeholder-image large">
+            <img
+              src="images/Altogether.png"
+              alt="Complete System Pipeline"
+              style="
+                width: 100%;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+              "
+            />
+            <p><em>Fig 4. Complete System Pipeline</em></p>
+          </div>
 
           <h3>Dataset</h3>
           <p>
@@ -139,9 +299,9 @@
         </div>
       </section>
 
-      <!-- 3. Implementation -->
+      <!-- Implementation -->
       <section id="implementation">
-        <h2>3. Implementation</h2>
+        <h2>Implementation</h2>
         <div class="content-block">
           <h3>Tech Stack</h3>
           <ul class="tech-stack">
@@ -181,9 +341,17 @@
         </div>
       </section>
 
-      <!-- 4. Results -->
+      <!-- Results -->
       <section id="results">
-        <h2>4. Results</h2>
+        <h2>Results, Benchmark, and Evaluation</h2>
+        <div class="content-block">
+          <h3>Benchmarking on Segmentation</h3>
+          <h4>Why we benchmark on Segmentation?</h4>
+          <p>Reason here</p>
+          <h4>Below are the segmentation Benchmarking on 4 models: Mask2Former, OneFormer, SegFormer, and NYU</h4>
+          <p>what are the 4 models? include a link to each, and a brief explanation why we chose these</p>
+          
+        </div>
         <div class="content-block">
           <h3>Qualitative Results</h3>
           <p>
@@ -258,9 +426,9 @@
         </div>
       </section>
 
-      <!-- 5. Discussion -->
+      <!-- Discussion -->
       <section id="discussion">
-        <h2>5. Discussion</h2>
+        <h2>Discussion</h2>
         <div class="content-block">
           <h3>Findings & Implications</h3>
           <p>
@@ -292,27 +460,6 @@
             a monocular depth estimation model (like MiDaS) to handle occlusions
             more accurately.
           </p>
-        </div>
-      </section>
-
-      <!-- 6. Video -->
-      <section id="video">
-        <h2>6. Presentation Video</h2>
-        <div class="content-block center-text">
-          <p>
-            Watch our 5-minute project presentation explaining the technical
-            details and results.
-          </p>
-
-          <div class="video-container">
-            <iframe
-              src="https://www.youtube.com/embed/28DcFrfub-0"
-              title="Wall Designer Tool Presentation"
-              frameborder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen
-            ></iframe>
-          </div>
         </div>
       </section>
     </main>
