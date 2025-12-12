@@ -60,19 +60,6 @@
       <section id="motivation">
         <h2>Motivation</h2>
         <div class="content-block">
-          <p
-            style="
-              background-color: #e8f4f8;
-              padding: 10px;
-              border-left: 4px solid #3498db;
-              margin-bottom: 20px;
-            "
-          >
-            <strong>See also:</strong> Check out our
-            <a href="midterm.html"><strong>Midterm Project Report</strong></a>
-            for details on our team, initial experiments, and methodology
-            evolution.
-          </p>
           <h3>Problem Statement</h3>
           <p>
             Modern AR and virtual-staging tools need to replace wall textures
@@ -397,6 +384,25 @@
             <strong>inference speed</strong>.
           </p>
 
+          <h4>Metrics Used</h4>
+          <ul>
+            <li>
+              <strong>IoU (Intersection over Union):</strong> Measures the
+              degree of overlap between the predicted segmentation and the
+              ground truth.
+            </li>
+            <li>
+              <strong>Dice Coefficient (F1):</strong> Measures pixel
+              classification accuracy, harmonizing precision and recall.
+            </li>
+            <li>
+              <strong>Boundary F-Score:</strong> Measures edge/contour accuracy.
+              Similar formula to Dice Coefficient but focuses strictly on the
+              precision of the boundary pixels, which is critical for clean
+              splitting.
+            </li>
+          </ul>
+
           <h4>Evaluated Models</h4>
           <p>
             We benchmarked four state-of-the-art architectures to select our
@@ -552,6 +558,16 @@
             <strong>PlaneRCNN</strong> for 3D-aware segmentation or integrating
             a monocular depth estimation model (like MiDaS) to handle occlusions
             more accurately.
+          </p>
+        </div>
+      </section>
+
+      <section id="archived-reports">
+        <div class="content-block">
+          <p style="font-size: 0.9em; color: #666;">
+            <strong>Archived Reports:</strong> View our 
+            <a href="midterm.html">Midterm Project Report</a> 
+            for details on initial experiments and methodology evolution.
           </p>
         </div>
       </section>
