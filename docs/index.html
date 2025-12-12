@@ -476,7 +476,7 @@
           </ul>
         </div>
         <div class="content-block">
-          <h3>Qualitative Results</h3>
+          <h3>Quantitative Results</h3>
           <h4>Box Plot Comparison of the 4 Models</h4>
           <div class="boxplot-container">
             <figure class="boxplot-figure">
@@ -547,52 +547,6 @@
               <strong>Boundary F-score:</strong> 0.4231
             </p>
           </div>
-
-          <h3>Quantitative Evaluation</h3>
-          <p>
-            We evaluated our segmentation and splitting accuracy against
-            manually annotated ground truth.
-          </p>
-
-          <table class="results-table">
-            <thead>
-              <tr>
-                <th>Method</th>
-                <th>IoU (Intersection over Union)</th>
-                <th>Boundary F-Score</th>
-                <th>Inference Time (s)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Baseline (Color Clustering)</td>
-                <td>0.35</td>
-                <td>N/A</td>
-                <td>~0.05</td>
-              </tr>
-              <tr>
-                <td><strong>Ours (Mask2Former + Refiner)</strong></td>
-                <td><strong>0.6075</strong></td>
-                <td><strong>0.3842</strong></td>
-                <td><strong>0.1113</strong></td>
-              </tr>
-            </tbody>
-          </table>
-
-          <h3>Comparison</h3>
-          <div class="placeholder-image">
-            <img
-              src="images/mapping.png"
-              alt="Comparison of Our Method vs. Naive Homography"
-              style="
-                width: 100%;
-                border-radius: 8px;
-                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-              "
-            />
-            <p><em>Fig 4. Visual Result demonstrating our method's ability to handle occlusion and perspective (compared to naive homography which fails on occlusions)</em></p>
-          </div>
-
         </div>
       </section>
 
