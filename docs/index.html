@@ -474,69 +474,43 @@
           <p><strong>Discussion:</strong> We could see from this graph that the OneFormer cost more computation/time than any other models. This is one reason that we eventually chose the Mask2Former as the segmentation model.</p>
           <hr>
           <br>
-
-          <div class="gallery">
-            <div class="gallery-item">
-              <div class="placeholder-image large">
-                <p>[PLACEHOLDER: Result Image Set 1]</p>
-                <p>
-                  (Original Image | Segmentation Mask | Split Polygons | Final
-                  Output)
-                </p>
-              </div>
-              <p class="caption">
-                Fig 2. Texture transfer on a complex living room scene.
-              </p>
-            </div>
-            <div class="gallery-item">
-              <div class="placeholder-image large">
-                <p>[PLACEHOLDER: Result Image Set 2]</p>
-                <p>
-                  (Original Image | Segmentation Mask | Split Polygons | Final
-                  Output)
-                </p>
-              </div>
-              <p class="caption">
-                Fig 3. Handling multiple adjacent walls in a hallway.
-              </p>
-            </div>
+          
+          <h3>Output Results</h3>
+          <p>Our result using ADE_val_00000130 from ADE20k validation set</p>
+          <div class="boxplot-container">
+            <figure class="boxplot-figure">
+              <img
+                src="images/ADE_val_00000130_visualization.png"
+                alt="ADE_val_00000130_visualization"
+                class="boxplot-image"
+              />
+              <figcaption class="boxplot-caption">
+                Fig. ADE_val_00000130_visualization
+              </figcaption>
+            </figure>
+            <p style="text-align: center; margin-top: 15px; font-size: 1rem;">
+              <strong>IoU:</strong> 0.5166 | 
+              <strong>Dice:</strong> 0.6841 | 
+              <strong>Boundary F-score:</strong> 0.2569
+            </p>
           </div>
 
-          <h3>Quantitative Evaluation</h3>
-          <p>
-            We evaluated our segmentation and splitting accuracy against
-            manually annotated ground truth.
-          </p>
-
-          <table class="results-table">
-            <thead>
-              <tr>
-                <th>Method</th>
-                <th>IoU (Intersection over Union)</th>
-                <th>Wall Detection Accuracy</th>
-                <th>Inference Time (s)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Baseline (Color Clustering)</td>
-                <td>[PLACEHOLDER]</td>
-                <td>[PLACEHOLDER]</td>
-                <td>[PLACEHOLDER]</td>
-              </tr>
-              <tr>
-                <td><strong>Ours (Mask2Former + Refiner)</strong></td>
-                <td><strong>[PLACEHOLDER]</strong></td>
-                <td><strong>[PLACEHOLDER]</strong></td>
-                <td><strong>[PLACEHOLDER]</strong></td>
-              </tr>
-            </tbody>
-          </table>
-
-          <h3>Comparison</h3>
-          <div class="placeholder-image">
-            <p>[PLACEHOLDER: Visual comparison with baseline method]</p>
-            <p><em>Fig 4. Comparison of Our Method vs. Naive Homography</em></p>
+          <div class="boxplot-container">
+            <figure class="boxplot-figure">
+              <img
+                src="images/ade_132_val_visualization.png"
+                alt="ade_132_val_visualization"
+                class="boxplot-image"
+              />
+              <figcaption class="boxplot-caption">
+                Fig. ade_132_val_visualization
+              </figcaption>
+            </figure>
+            <p style="text-align: center; margin-top: 15px; font-size: 1rem;">
+              <strong>IoU:</strong> 0.8771 | 
+              <strong>Dice:</strong> 0.9345 | 
+              <strong>Boundary F-score:</strong> 0.4231
+            </p>
           </div>
         </div>
       </section>
