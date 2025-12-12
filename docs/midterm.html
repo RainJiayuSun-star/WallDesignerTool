@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Midterm Report - Wall Designer Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Montserrat:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Wall Designer Tool</h1>
+        <p class="subtitle">CS566 Computer Vision Final Project</p>
+        <nav>
+          <ul>
+            <li><a href="index.html">Final Report (Home)</a></li>
+            <li><a href="midterm.html" class="active">Midterm Report</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="team">
+        <h2>Team Members</h2>
+        <div class="content-block">
+          <ul>
+            <li><strong>Bhinu Puvva</strong> - puvvala@wisc.edu</li>
+            <li><strong>Bala Shukla</strong> - shukla35@wisc.edu</li>
+            <li><strong>Rain Jiayu Sun</strong> - jsun424@wisc.edu</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="feedback">
+        <h2>Briefly Addressing Feedback from the Proposal</h2>
+        <div class="content-block">
+          <p>
+            At the start of this project we were targeting a broad-scoped
+            problem framed as a tool. Taking into account feedback from the
+            Project Proposal, we pivoted our idea to be more targeted around a
+            specific research question:
+          </p>
+          <blockquote>
+            <strong>
+              Can modern computer vision methods accurately segment planar
+              surfaces (walls, floors) from a single indoor image to enable
+              realistic, perspective-correct texture transfer?
+            </strong>
+          </blockquote>
+          <p>To answer this question, we split it into two main stages:</p>
+
+          <h3>1. Segmentation Stage ("Completed")</h3>
+          <p>Focuses on identifying the target surface:</p>
+          <ul>
+            <li>
+              What are the primary approaches for wall segmentation, and how do
+              non-semantic methods (color clustering, edge detection) compare to
+              semantic segmentation (deep learning models that understand object
+              categories)?
+            </li>
+            <li>
+              How do these approaches compare in segmentation accuracy (IoU,
+              Boundary F-score), robustness to real-world challenges (clutter,
+              occlusion, lighting), and computational performance?
+            </li>
+            <li>
+              What are the specific failure modes, and under what scene
+              conditions does each method excel or fail?
+            </li>
+          </ul>
+
+          <h3>2. Overlay Stage (Next)</h3>
+          <p>
+            Focuses on applying textures realistically once we have the wall
+            mask:
+          </p>
+          <ul>
+            <li>
+              Given a binary wall mask, how do we extract geometric information
+              (corners, boundaries) for perspective correction?
+            </li>
+            <li>
+              What methods exist for perspective-correct texture warping
+              (homography estimation from corner correspondences)?
+            </li>
+            <li>
+              How do different blending techniques (alpha, Poisson,
+              multiplicative) compare in visual realism and lighting
+              preservation?
+            </li>
+            <li>
+              What are failure modes when segmentation is imperfect or scene
+              lighting is complex?
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="progress">
+        <h2>Summary of Current Progress</h2>
+        <div class="content-block">
+          <h3>Dataset Selection and Preparation</h3>
+          <p>
+            We have identified and prepared evaluation datasets carefully
+            selected to avoid overlap with Mask2Former's training data (ADE20K):
+          </p>
+
+          <h4>Primary Dataset: ScanNet</h4>
+          <ul>
+            <li>
+              1,513 indoor scenes with dense semantic annotations (40 classes
+              including wall, floor, ceiling)
+            </li>
+            <li>
+              Validation: 312 scenes (~10,000 frames), Test: 100 scenes (~3,000
+              frames)
+            </li>
+            <li>
+              Provides pixel-level semantic labels and 3D room layout with
+              ground truth corner points
+            </li>
+            <li>
+              <strong>NOT used in Mask2Former training</strong>, ensuring
+              unbiased evaluation
+            </li>
+          </ul>
+
+          <h4>Secondary Datasets</h4>
+          <ul>
+            <li>
+              <strong>Matterport3D:</strong> 500 selected high-quality frames
+              for cross-dataset validation
+            </li>
+            <li>
+              <strong>Custom Mobile Captures:</strong> 50-100 iPhone/Android
+              images for real-world testing
+            </li>
+          </ul>
+
+          <p>
+            <strong>Dataset Preparation:</strong> Selected frames with ≥15% wall
+            coverage, filtered for single dominant planar walls, variety of room
+            types (bedrooms, living rooms, offices, kitchens) and lighting
+            conditions.
+          </p>
+
+          <h3>Evaluation Metrics</h3>
+          <ul>
+            <li>
+              <strong>Segmentation Quality:</strong> IoU, Dice Coefficient,
+              Boundary IoU, Boundary F-score (2px threshold), Pixel Accuracy,
+              Precision/Recall/F1
+            </li>
+            <li>
+              <strong>Geometric Accuracy:</strong> Corner Detection Quality (0-1
+              scale), Corner Accuracy (% within 15px), Mean Corner Error,
+              Homography Reprojection Error
+            </li>
+            <li>
+              <strong>Runtime Performance:</strong> Per-stage timing
+              (segmentation, refinement, corner detection, warping, blending)
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="evolution">
+        <h2>Evolution of Our Approach</h2>
+        <div class="content-block">
+          <p>
+            Our journey toward effective wall segmentation revealed fundamental
+            differences between non-semantic and semantic approaches:
+          </p>
+
+          <h3>Phase 1: Edge Detection with Hough Transform (Failed)</h3>
+          <ul>
+            <li>
+              <strong>Approach:</strong> We initially explored using Canny edge
+              detection followed by Hough line detection to identify wall
+              boundaries.
+            </li>
+            <li>
+              <strong>Why it Failed:</strong> This approach lacks semantic
+              understanding—it detects ALL edges indiscriminately. The Hough
+              transform found lines from furniture edges, door frames, and
+              shadows with equal enthusiasm. It cannot distinguish between a
+              "wall-floor boundary" and a "table edge".
+            </li>
+            <li>
+              <strong>Key Insight:</strong> Edge detection alone cannot perform
+              segmentation; it only identifies boundaries without understanding
+              regions.
+            </li>
+          </ul>
+
+          <h3>Phase 2: Color-Based Clustering (Partial Success)</h3>
+          <ul>
+            <li>
+              <strong>Approach:</strong> K-Means and Mean Shift clustering in
+              color space, assuming walls would form large, uniform color
+              regions.
+            </li>
+            <li>
+              <strong>Results:</strong> Worked well on idealized scenes but
+              failed in realistic ones:
+              <ul>
+                <li>
+                  Lighting Variation: A single wall split into multiple clusters
+                  (bright vs. shadow).
+                </li>
+                <li>
+                  Similar Colors: Furniture with wall-like colors merged with
+                  walls.
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Key Insight:</strong> Non-semantic methods relying solely
+              on color fail to understand scene structure.
+            </li>
+          </ul>
+
+          <h3>Phase 3: Semantic Segmentation with Mask2Former (Success)</h3>
+          <ul>
+            <li>
+              <strong>Critical Advantage:</strong> Semantic models understand
+              object categories. Mask2Former recognizes "this is a wall," "this
+              is a floor."
+            </li>
+            <li>
+              <strong>Why This Matters:</strong> A wall remains a "wall" whether
+              it's bright, dark, or textured. The model learns contextual
+              relationships (walls connect to floors/ceilings).
+            </li>
+          </ul>
+
+          <h4>Mask2Former Implementation Details</h4>
+          <p>
+            We selected Mask2Former-ADE20K as our backbone because of its strong
+            indoor performance (150 classes), superior masked attention
+            architecture, and direct per-pixel confidence scoring.
+          </p>
+        </div>
+      </section>
+
+      <section id="results">
+        <h2>Preliminary Evaluation Results</h2>
+        <div class="content-block">
+          <p>
+            Evaluated on <strong>250 ScanNet frames</strong> with diverse room
+            types and clutter levels.
+          </p>
+
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Mean IoU</td>
+                <td>0.74 (± 0.12 std)</td>
+              </tr>
+              <tr>
+                <td>Dice Coefficient</td>
+                <td>0.83</td>
+              </tr>
+              <tr>
+                <td>Boundary F-score</td>
+                <td>0.76</td>
+              </tr>
+              <tr>
+                <td>Success Rate</td>
+                <td>91% (228/250 frames)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Performance by Scene Complexity</h3>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Scene Type</th>
+                <th>Mean IoU</th>
+                <th>Boundary F</th>
+                <th>Samples</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Simple (low clutter)</td>
+                <td>0.82</td>
+                <td>0.81</td>
+                <td>92</td>
+              </tr>
+              <tr>
+                <td>Medium (moderate clutter)</td>
+                <td>0.73</td>
+                <td>0.75</td>
+                <td>118</td>
+              </tr>
+              <tr>
+                <td>Complex (heavy clutter)</td>
+                <td>0.63</td>
+                <td>0.69</td>
+                <td>40</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Key Findings</h3>
+          <ul>
+            <li>
+              <strong>2× improvement</strong> over clustering (~0.35 IoU) and
+              >3× over edge detection (~0.25 IoU).
+            </li>
+            <li>
+              Semantic understanding handles lighting variation and furniture
+              occlusion robustly.
+            </li>
+            <li>
+              <strong>9% failures</strong> occur in: extremely dark scenes,
+              unusual geometries, heavy occlusion (<10% wall visible), glass
+              walls.
+            </li>
+          </ul>
+
+          <h3>Current Difficulties</h3>
+          <ul>
+            <li>
+              <strong>Corner Detection Robustness:</strong> Struggles with
+              irregular boundaries and non-rectangular walls.
+            </li>
+            <li>
+              <strong>Computational Cost:</strong> 300ms segmentation may be too
+              slow for real-time mobile.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="next-steps">
+        <h2>Next Steps: Overlay Pipeline</h2>
+        <div class="content-block">
+          <ol>
+            <li>
+              <strong>Geometric Information Extraction:</strong>
+              Input binary wall mask &rarr; Corner Detection (Harris/Deep)
+              &rarr; Polygon Approximation.
+            </li>
+            <li>
+              <strong>Perspective Correction:</strong>
+              Match corners to canonical rectangle &rarr; Compute Homography
+              &rarr; Validate reprojection error.
+            </li>
+            <li>
+              <strong>Texture Warping:</strong>
+              Forward warping with multi-resolution handling to avoid artifacts.
+            </li>
+            <li>
+              <strong>Realistic Blending:</strong>
+              Extract lighting/shadows &rarr; Apply Multiply/Poisson blending to
+              preserve scene realism.
+            </li>
+            <li>
+              <strong>Post-Processing:</strong>
+              Color harmonization and edge feathering.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="conclusion">
+        <h2>Conclusion</h2>
+        <div class="content-block">
+          <p>
+            We have made strong progress toward our goal of accurate planar
+            surface segmentation for realistic texture overlay. Our systematic
+            exploration from non-semantic methods (edge detection, clustering)
+            to semantic segmentation (Mask2Former) revealed the critical
+            importance of semantic understanding in complex indoor scenes.
+          </p>
+          <p>
+            Our preliminary results (IoU 0.74, Dice 0.83) demonstrate that
+            semantic segmentation far exceeds the capabilities of traditional
+            computer vision approaches for this task. The remaining work focuses
+            on implementing the complete overlay pipeline and conducting
+            comprehensive evaluation.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container">
+        <p>&copy; 2025 Wall Designer Tool. CS566 Final Project.</p>
+      </div>
+    </footer>
+  </body>
+</html>
