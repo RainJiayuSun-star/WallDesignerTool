@@ -1,0 +1,7 @@
+main
+mapping
+mask2former_cannyhoughwallsplitting
+mask2former_texture_mapping
+ourSet
+segmentation
+splitting

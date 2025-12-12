@@ -57,8 +57,23 @@ def decode_ade20k_seg_png(seg_img):
 def load_examples(args):
     """
     Loads images either locally (looking for .jpg) or from the streamed ADE20K dataset.
+    If --file is specified, loads only that single file.
     """
     examples = []
+    
+    # If --file is specified, load only that file
+    if args.file:
+        if not os.path.exists(args.file):
+            print(f"Error: File {args.file} does not exist.")
+            return []
+        try:
+            img = Image.open(args.file).convert("RGB")
+            examples.append({"image": img, "filename": os.path.basename(args.file), "fullpath": args.file})
+            print(f"Loading single file: {args.file}")
+        except Exception as e:
+            print(f"Error loading {args.file}: {e}")
+        return examples
+    
     if args.local:
         print(f"Loading local images from {args.dir}...")
         if not os.path.exists(args.dir):
@@ -175,6 +190,7 @@ def main():
         help="Use local images from --dir (defaults to ADE20K validation/home_or_hotel/childs_room)",
     )
     parser.add_argument("--dir", type=str, default=default_childs_room_dir, help="Directory containing local images and GT masks")
+    parser.add_argument("--file", type=str, default=None, help="Path to a specific image file to benchmark (overrides --dir)")
     default_output = os.path.normpath(os.path.join(script_dir, "benchmark_output", "benchmark_results_childs_room.csv"))
     parser.add_argument("--output", type=str, default=default_output, help="Path to save the final benchmark CSV")
     parser.add_argument(
@@ -184,6 +200,13 @@ def main():
     )
     
     args = parser.parse_args()
+    
+    # If --file is specified and output is default, customize output filename
+    if args.file and args.output == default_output:
+        file_basename = os.path.splitext(os.path.basename(args.file))[0]
+        args.output = os.path.normpath(
+            os.path.join(script_dir, "benchmark_output", f"benchmark_results_{file_basename}.csv")
+        )
 
     # Ensure output directory exists
     out_dir = os.path.dirname(args.output) or "."
@@ -217,7 +240,11 @@ def main():
         print(f"--- Processing {image_name} ({idx+1}/{len(examples)}) ---")
 
         # A. Load Ground Truth Mask 
-        gt_binary_mask = load_ground_truth(example, gt_dir=args.dir)
+        # If processing a single file, use its directory; otherwise use args.dir
+        gt_dir = os.path.dirname(example.get('fullpath', '')) if example.get('fullpath') else args.dir
+        if not gt_dir or not os.path.exists(gt_dir):
+            gt_dir = args.dir
+        gt_binary_mask = load_ground_truth(example, gt_dir=gt_dir)
         if gt_binary_mask is None:
             continue
 

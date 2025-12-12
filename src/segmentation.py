@@ -1,12 +1,18 @@
 import torch
 import numpy as np
+from PIL import Image
 from transformers import Mask2FormerImageProcessor, Mask2FormerForUniversalSegmentation
 
+# define an abstract base class for any segmentation approach
 class SegmentationStrategy:
     def segment(self, image):
         raise NotImplementedError
 
+# define an abstract base class for segmentation approach
 class Mask2FormerSegmentation(SegmentationStrategy):
+    """
+    Implements wall segmentation using a pre-trained Mask2Former model
+    """
     def __init__(self, model_id="facebook/mask2former-swin-large-ade-semantic"):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Loading segmentation model: {model_id} on {self.device}...")
@@ -32,3 +38,11 @@ class Mask2FormerSegmentation(SegmentationStrategy):
         prediction_np = prediction.cpu().numpy()
         return prediction_np, self.wall_ids
 
+    # method to save the output as a file
+    def save_raw_segmentation(self, prediction_np, file_path):
+        """
+        Saves the raw class ID Numpy array to a file
+        """
+        np.save(file_path, prediction_np)
+        print(f"Raw segmentation saved to {file_path}")
+        

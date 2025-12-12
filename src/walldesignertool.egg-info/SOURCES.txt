@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/main.py
+src/mapping.py
+src/mask2former_cannyhoughwallsplitting.py
+src/mask2former_texture_mapping.py
+src/segmentation.py
+src/splitting.py
+src/walldesignertool.egg-info/PKG-INFO
+src/walldesignertool.egg-info/SOURCES.txt
+src/walldesignertool.egg-info/dependency_links.txt
+src/walldesignertool.egg-info/requires.txt
+src/walldesignertool.egg-info/top_level.txt
