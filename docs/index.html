@@ -60,6 +60,19 @@
       <section id="motivation">
         <h2>Motivation</h2>
         <div class="content-block">
+          <p
+            style="
+              background-color: #e8f4f8;
+              padding: 10px;
+              border-left: 4px solid #3498db;
+              margin-bottom: 20px;
+            "
+          >
+            <strong>See also:</strong> Check out our
+            <a href="midterm.html"><strong>Midterm Project Report</strong></a> 
+            for details on our team, initial experiments, and methodology
+            evolution.
+          </p>
           <h3>Problem Statement</h3>
           <p>
             Modern AR and virtual-staging tools need to replace wall textures
@@ -456,11 +469,38 @@
         </div>
         <div class="content-block">
           <h3>Qualitative Results</h3>
-          <p>
-            Below are examples of the system in action, showing the pipeline
-            stages: Input &rarr; Segmentation &rarr; Splitting &rarr; Final
-            Texture Overlay.
-          </p>
+          <h4>Box Plot Comparison of the 4 Models</h4>
+          <div class="boxplot-container">
+            <figure class="boxplot-figure">
+              <img
+                src="images/box_plot_comparison.png"
+                alt="Box Plot Comparison: Mask2Former, OneFormer, SegFormer, and NYU"
+                class="boxplot-image"
+              />
+              <figcaption class="boxplot-caption">
+                Fig. Box Plot Comparison: Performance metrics across Mask2Former, OneFormer, SegFormer, and NYU models
+              </figcaption>
+            </figure>
+          </div>
+          <p><strong>Discussion: </strong>we can see from the graph that the performance of Mask2Former and OneFormer and similar, both slightly outperforms the SegFormer and the NYU model</p>
+          <hr>
+          <br>
+          <p><strong>Statistics Summary of the 4 Models</strong></p>
+          <div class="boxplot-container">
+            <figure class="boxplot-figure">
+              <img
+                src="images/statistics_summary.png"
+                alt="Statistics Summary: Mask2Former, OneFormer, SegFormer, and NYU"
+                class="boxplot-image"
+              />
+              <figcaption class="boxplot-caption">
+                Fig. Box Plot Comparison: Performance metrics across Mask2Former, OneFormer, SegFormer, and NYU models
+              </figcaption>
+            </figure>
+          </div>
+          <p><strong>Discussion:</strong> We could see from this graph that the OneFormer cost more computation/time than any other models. This is one reason that we eventually chose the Mask2Former as the segmentation model.</p>
+          <hr>
+          <br>
 
           <div class="gallery">
             <div class="gallery-item">
