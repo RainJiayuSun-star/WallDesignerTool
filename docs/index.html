@@ -15,11 +15,14 @@
     <header>
       <div class="container">
         <h1>Wall Designer Tool</h1>
-        <p class="subtitle">CS566 Computer Vision (Fall 2025S) Final Project </p>
-        <div class="team-members" style="margin-top: 0.5rem; margin-bottom: 2.5rem;">
+        <p class="subtitle">CS566 Computer Vision (Fall 2025S) Final Project</p>
+        <div
+          class="team-members"
+          style="margin-top: 0.5rem; margin-bottom: 2.5rem"
+        >
           <p>
-            <strong>Bhinu Puvva</strong> - puvvala@wisc.edu | 
-            <strong>Bala Shukla</strong> - shukla35@wisc.edu | 
+            <strong>Bhinu Puvva</strong> - puvvala@wisc.edu |
+            <strong>Bala Shukla</strong> - shukla35@wisc.edu |
             <strong>Rain Jiayu Sun</strong> - jsun424@wisc.edu
           </p>
         </div>
@@ -41,7 +44,6 @@
       <section id="video">
         <h2>Presentation Video</h2>
         <div class="content-block center-text">
-
           <div class="video-container">
             <iframe
               src="https://www.youtube.com/embed/28DcFrfub-0"
@@ -308,36 +310,69 @@
             <li><strong>Language:</strong> Python 3.10+</li>
             <li>
               <strong>Deep Learning:</strong> PyTorch, Hugging Face Transformers
-              (for Mask2Former)
             </li>
+            <li><strong>Models:</strong> Mask2Former, OneFormer, SegFormer</li>
             <li>
               <strong>Computer Vision:</strong> OpenCV (cv2) for geometric
-              processing and image manipulation
+              processing, edge detection, and homography
             </li>
             <li>
-              <strong>Data Handling:</strong> NumPy, PIL, Hugging Face Datasets
+              <strong>Data Pipeline:</strong> Hugging Face Datasets (streaming
+              ADE20K), NumPy, Pillow
             </li>
             <li><strong>Visualization:</strong> Matplotlib</li>
           </ul>
 
           <h3>Engineering Challenges</h3>
           <p>
-            A major implementation challenge was the
-            <strong>"Corner Problem"</strong>. Semantic segmentation models
-            treat all walls as a single "wall" class, ignoring geometry. We
-            engineered a robust splitting algorithm that:
+            Bridging the gap between
+            <strong>semantic understanding</strong> (what is a wall?) and
+            <strong>geometric understanding</strong> (where is the corner?) was
+            our primary challenge.
           </p>
-          <ol>
-            <li>Filters edges to find only those internal to the wall mask.</li>
-            <li>
-              Filters Hough lines by angle to strictly target vertical wall
-              intersections.
-            </li>
-            <li>
-              Approximates the resulting blobs into clean 4-point polygons for
-              homography calculation.
-            </li>
-          </ol>
+
+          <h4>1. The "Corner Problem" (Geometric Splitting)</h4>
+          <p>
+            Semantic models return a single binary blob for all walls in a room.
+            To texture them correctly, we must split this blob into distinct
+            planes.
+            <br />
+            <em>Failed Approach:</em> Standard Canny Edge Detection + Hough
+            Transform was too sensitive to texture noise (e.g., stripes on
+            wallpaper) and failed in dark corners.
+            <br />
+            <em>Our Solution:</em> <strong>Ceiling Kink Analysis</strong>. Since
+            ceilings are rarely occluded compared to floors, we analyze the
+            upper contour of the wall mask. We detect sharp geometric changes
+            ("kinks") in the ceiling line to identify corners, then
+            mathematically project these down to infer the floor boundary,
+            creating clean 3D-aware trapezoids even when the floor is hidden by
+            a couch.
+          </p>
+
+          <h4>2. Perspective "Twisting" Artifacts</h4>
+          <p>
+            <em>Challenge:</em> When warping a rectangular texture onto a
+            trapezoid, standard homography can flip or twist the image if
+            vertices are not strictly ordered (e.g., Top-Left vs Bottom-Left).
+            <br />
+            <em>Solution:</em> We implemented a strict
+            <strong>Vertex Sorting Algorithm</strong> that enforces a Top-Left
+            &rarr; Top-Right &rarr; Bottom-Right &rarr; Bottom-Left order based
+            on the inferred geometry, ensuring textures always align with the
+            room's vanishing points.
+          </p>
+
+          <h4>3. Occlusion Handling</h4>
+          <p>
+            We developed a
+            <strong>Masked Perspective Mapping</strong> technique. We compute
+            the perspective warp using the <em>geometric trapezoid</em> (perfect
+            perspective) but apply the texture only within the
+            <em>semantic mask</em> (pixel-perfect boundaries). This ensures the
+            wallpaper has the correct 3D slant but doesn't accidentally paint
+            over a lamp or plant standing in front of the wall.
+          </p>
         </div>
       </section>
 
@@ -346,11 +381,64 @@
         <h2>Results, Benchmark, and Evaluation</h2>
         <div class="content-block">
           <h3>Benchmarking on Segmentation</h3>
-          <h4>Why we benchmark on Segmentation?</h4>
-          <p>Reason here</p>
-          <h4>Below are the segmentation Benchmarking on 4 models: Mask2Former, OneFormer, SegFormer, and NYU</h4>
-          <p>what are the 4 models? include a link to each, and a brief explanation why we chose these</p>
-          
+          <h4>Why benchmark Segmentation?</h4>
+          <p>
+            Accurate segmentation is the foundation of our pipeline. If the
+            model fails to capture the precise boundary between the wall and the
+            ceiling, the subsequent geometric analysis (Kink Detection) will
+            fail, leading to slanted or distorted textures. We needed to find
+            the optimal balance between
+            <strong>boundary precision</strong> (IoU) and
+            <strong>inference speed</strong>.
+          </p>
+
+          <h4>Evaluated Models</h4>
+          <p>
+            We benchmarked four state-of-the-art architectures to select our
+            backbone:
+          </p>
+          <ul>
+            <li>
+              <strong
+                ><a
+                  href="https://huggingface.co/facebook/mask2former-swin-large-ade-semantic"
+                  target="_blank"
+                  >Mask2Former (Swin-Large)</a
+                ></strong
+              >: A transformer-based model that treats segmentation as a mask
+              classification problem. <em>Why:</em> Known for state-of-the-art
+              performance and sharp boundary detection.
+            </li>
+            <li>
+              <strong
+                ><a
+                  href="https://huggingface.co/shi-labs/oneformer_ade20k_swin_large"
+                  target="_blank"
+                  >OneFormer</a
+                ></strong
+              >: A universal image segmentation framework that unifies semantic,
+              instance, and panoptic segmentation. <em>Why:</em> To see if a
+              multi-task model offers better context understanding for complex
+              indoor scenes.
+            </li>
+            <li>
+              <strong
+                ><a
+                  href="https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512"
+                  target="_blank"
+                  >SegFormer</a
+                ></strong
+              >: A lightweight, efficient transformer design. <em>Why:</em> To
+              test if a faster, lighter model could provide sufficient accuracy
+              for real-time applications.
+            </li>
+            <li>
+              <strong>NYU Depth V2 (via SegFormer)</strong>: Models fine-tuned
+              on the NYU Depth dataset. <em>Why:</em> To evaluate if models
+              trained specifically on indoor depth datasets generalize better to
+              wall geometry than general datasets like ADE20K.
+            </li>
+          </ul>
         </div>
         <div class="content-block">
           <h3>Qualitative Results</h3>
