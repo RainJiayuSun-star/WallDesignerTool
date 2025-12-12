@@ -183,26 +183,24 @@
 
           <div class="step-container">
             <div class="step-text">
-              <h3>2. Splitting Method</h3>
-              <p>
-                We explored image-based methods like Canny Edge + Hough
-                Transform to detect vertical dividers and Vertical Projection
-                (summing gradients) to find wall breaks, but these were too
-                sensitive to noise (like wallpaper patterns) or failed in dark
-                corners.
-              </p>
-              <p>
-                We settled on
-                <strong
-                  >Geometric Contour Analysis (specifically
-                  CeilingKinkSplitting)</strong
-                >. The rationale is that the ceiling line is the most reliable
-                feature in a room, whereas the floor is often occluded by
-                furniture; by detecting geometric "kinks" (corners) in the
-                ceiling profile, we can reliably separate walls and
-                mathematically infer the floor line to create clean trapezoidal
-                planes, even when the actual floor boundary is hidden.
-              </p>
+          <h3>2. Splitting Method</h3>
+          <p>
+            We initially moved from local edge detection to 
+            <strong>Vertical Projection Analysis</strong> (summing gradients to find structural peaks), 
+            which successfully reduced over-segmentation compared to Canny edges. However, it still struggled with 
+            non-vertical wall boundaries.
+          </p>
+          <p>
+            Our final breakthrough was
+            <strong
+              >Geometric Contour Analysis (specifically
+              CeilingKinkSplitting)</strong
+            >. The rationale is that the ceiling line is the most reliable
+            feature in a room. By analyzing the vector profile of the segmentation mask's upper boundary, 
+            we could detect geometric "kinks" (corners) directly. This allowed us to filter out noise more 
+            robustly than pixel-grid methods and mathematically infer the floor line to create clean trapezoidal
+            planes.
+          </p>
             </div>
             <div class="step-image">
               <figure style="margin: 0; text-align: center">
@@ -341,18 +339,23 @@
             creating clean 3D-aware trapezoids even when the floor is hidden by
             a couch.
           </p>
+          <p>
+            <em>Robustness Detail:</em> To prevent artifacts where vertical wall edges were mistaken for ceilings (causing diagonal texture smears), we implemented <strong>Adaptive Slope Filtering</strong>. This rejects high-gradient segments from the ceiling path, ensuring only true horizontal-ish spans are textured.
+          </p>
 
           <h4>2. Perspective "Twisting" Artifacts</h4>
           <p>
-            <em>Challenge:</em> When warping a rectangular texture onto a
-            trapezoid, standard homography can flip or twist the image if
-            vertices are not strictly ordered (e.g., Top-Left vs Bottom-Left).
+            <em>Challenge:</em> Standard homography techniques often "twist" the
+            texture on slanted walls (e.g., attic ceilings or angled hallways)
+            because they blindly sort vertices by coordinate position (Top-Left,
+            Top-Right, etc.).
             <br />
-            <em>Solution:</em> We implemented a strict
-            <strong>Vertex Sorting Algorithm</strong> that enforces a Top-Left
-            &rarr; Top-Right &rarr; Bottom-Right &rarr; Bottom-Left order based
-            on the inferred geometry, ensuring textures always align with the
-            room's vanishing points.
+            <em>Solution:</em> We discovered that re-sorting was the problem. We
+            implemented <strong>Slope-Aware Ordering</strong> derived directly
+            from our "Ceiling Kink" analysis. By strictly maintaining the
+            sequence of the detected upper contour, we ensured vertices always
+            matched the physical vanishing points without artificial reordering,
+            eliminating twisting even on steep angles.
           </p>
 
           <h4>3. Occlusion Handling</h4>
@@ -497,7 +500,7 @@
               <tr>
                 <th>Method</th>
                 <th>IoU (Intersection over Union)</th>
-                <th>Wall Detection Accuracy</th>
+                <th>Boundary F-Score</th>
                 <th>Inference Time (s)</th>
               </tr>
             </thead>
