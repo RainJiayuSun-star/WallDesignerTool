@@ -7,23 +7,6 @@ This project aims to implement a system for realistic, perspective-correct textu
 1.  Can modern computer vision methods accurately segment planar surfaces (walls, floors) from a single indoor image?
 2.  How can we enable realistic, perspective-correct texture transfer onto these segmented planes?
 
-## Project Repository & Timeline
-
-* **Repository:** [https://github.com/RainJiayuSun-star/WallDesignerTool]
-
-### Project Timeline
-
-| Stage | Topic | Time Period | Status |
-| :--- | :--- | :--- | :--- |
-| **Segmentation** | Dataset prep (Bala) & Framework setup (Bala) | Week 1 (11.17-11.23) | Current week |
-| **Segmentation** | Phase 1 (Bala), Phase 2 (Rain), Phase 3 (Bhinu) | Week 1 (11.17-11.23) | Current week |
-| **Segmentation** | Phase 1, 2, 3 - Finish & Benchmark Code $\rightarrow$ Comparison | Week 2 (11.24-11.25) | |
-| **Overlay** | Overlay Stage - Finish | Week 2 (11.26-11.30) | |
-| **Final** | Website and Report | Week 3 (12.1-12.6) | |
-| **Final** | Presentation In class | Week 4 (12.11) | |
-
----
-
 ## 🛠️ Implementation Stages
 
 ### I. Segmentation Stage
