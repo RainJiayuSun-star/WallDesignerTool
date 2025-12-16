@@ -1,5 +1,7 @@
 # CS566 Final Project: Wall Designer Tool
 
+**VIEW src/README for the latest run instructions**
+
 ## Research Questions
 
 This project aims to implement a system for realistic, perspective-correct texture transfer onto indoor planar surfaces from a single image.
